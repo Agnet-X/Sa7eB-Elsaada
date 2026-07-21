@@ -196,6 +196,14 @@ async function startServer() {
     next();
   });
 
+  // Normalize req.url so routes match whether Vercel passes /api/store-data or /store-data
+  app.use((req, res, next) => {
+    if (!req.url.startsWith('/api')) {
+      req.url = '/api' + req.url;
+    }
+    next();
+  });
+
   // Real-time SSE endpoint
   app.get('/api/events', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
