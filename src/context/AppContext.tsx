@@ -5,6 +5,8 @@ import { INITIAL_REVIEWS } from '../data/reviews';
 import { HERO_VIDEOS, BUTCHER_SHOWCASE_VIDEOS } from '../data/videos';
 import { TODAY_OFFERS } from '../data/offers';
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
 const DEFAULT_SETTINGS: StoreSettings = {
   phone1: '01124795553',
   phone2: '01020404613',
@@ -182,7 +184,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Fetch shared store data from backend API
   const fetchStoreData = async () => {
     try {
-      const res = await fetch('/api/store-data');
+      const res = await fetch(`${API_BASE}/api/store-data`);
       if (res.ok) {
         const data = await res.json();
         // Only update each field if it exists and is a valid array/object
@@ -220,7 +222,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let eventSource: EventSource | null = null;
     const connectSSE = () => {
       try {
-        eventSource = new EventSource('/api/events');
+        eventSource = new EventSource(`${API_BASE}/api/events`);
         eventSource.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
@@ -304,7 +306,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStoreSettings(updated);
     showToast('تم حفظ إعدادات المحل والجزارة بنجاح ✨');
     try {
-      await fetch('/api/settings', {
+      await fetch(`${API_BASE}/api/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings }),
@@ -319,7 +321,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHeroVideos((prev) => [video, ...prev]);
     showToast('تمت إضافة فيديو الواجهة الجديد');
     try {
-      await fetch('/api/videos/hero', {
+      await fetch(`${API_BASE}/api/videos/hero`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ video }),
@@ -334,7 +336,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHeroVideos((prev) => prev.map((v) => (v.id === id ? { ...v, ...updated } : v)));
     showToast('تم تعديل فيديو الواجهة');
     try {
-      await fetch(`/api/videos/hero/${id}`, {
+      await fetch(`${API_BASE}/api/videos/hero/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated }),
@@ -349,7 +351,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHeroVideos((prev) => prev.filter((v) => v.id !== id));
     showToast('تم حذف فيديو الواجهة');
     try {
-      await fetch(`/api/videos/hero/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/api/videos/hero/${id}`, { method: 'DELETE' });
       fetchStoreData();
     } catch (e) {
       console.error(e);
@@ -360,7 +362,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGalleryVideos((prev) => [video, ...prev]);
     showToast('تمت إضافة فيديو للمعرض');
     try {
-      await fetch('/api/videos/gallery', {
+      await fetch(`${API_BASE}/api/videos/gallery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ video }),
@@ -375,7 +377,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGalleryVideos((prev) => prev.map((v) => (v.id === id ? { ...v, ...updated } : v)));
     showToast('تم تعديل فيديو المعرض');
     try {
-      await fetch(`/api/videos/gallery/${id}`, {
+      await fetch(`${API_BASE}/api/videos/gallery/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated }),
@@ -390,7 +392,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGalleryVideos((prev) => prev.filter((v) => v.id !== id));
     showToast('تم حذف الفيديو من المعرض');
     try {
-      await fetch(`/api/videos/gallery/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/api/videos/gallery/${id}`, { method: 'DELETE' });
       fetchStoreData();
     } catch (e) {
       console.error(e);
@@ -401,7 +403,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOffers((prev) => [offer, ...prev]);
     showToast('تمت إضافة العرض الجديد');
     try {
-      await fetch('/api/offers', {
+      await fetch(`${API_BASE}/api/offers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ offer }),
@@ -416,7 +418,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOffers((prev) => prev.map((o) => (o.id === id ? { ...o, ...updated } : o)));
     showToast('تم تعديل العرض بنجاح');
     try {
-      await fetch(`/api/offers/${id}`, {
+      await fetch(`${API_BASE}/api/offers/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated }),
@@ -431,7 +433,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOffers((prev) => prev.filter((o) => o.id !== id));
     showToast('تم حذف العرض');
     try {
-      await fetch(`/api/offers/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/api/offers/${id}`, { method: 'DELETE' });
       fetchStoreData();
     } catch (e) {
       console.error(e);
@@ -442,7 +444,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders((prev) => prev.map((ord) => (ord.id === orderId ? { ...ord, ...updated } : ord)));
     showToast(`تم تعديل تفاصيل الطلب ${orderId}`);
     try {
-      await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+      await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated }),
@@ -457,7 +459,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders((prev) => prev.filter((ord) => ord.id !== orderId));
     showToast(`تم حذف الطلب ${orderId} بنجاح 🗑️`);
     try {
-      await fetch(`/api/orders/${encodeURIComponent(orderId)}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, { method: 'DELETE' });
       fetchStoreData();
     } catch (e) {
       console.error(e);
@@ -468,7 +470,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders([]);
     showToast('تم مسح جميع الاوردرات بنجاح 🗑️');
     try {
-      await fetch('/api/orders/all', { method: 'DELETE' });
+      await fetch(`${API_BASE}/api/orders/all`, { method: 'DELETE' });
       fetchStoreData();
     } catch (e) {
       console.error(e);
@@ -479,7 +481,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders((prev) => prev.filter((ord) => ord.status !== 'cancelled'));
     showToast('تم مسح جميع الاوردرات الملغية 🗑️');
     try {
-      await fetch('/api/orders/cancelled', { method: 'DELETE' });
+      await fetch(`${API_BASE}/api/orders/cancelled`, { method: 'DELETE' });
       fetchStoreData();
     } catch (e) {
       console.error(e);
@@ -680,7 +682,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsOrderSuccessOpen(true);
 
     // Sync order to backend
-    fetch('/api/orders', {
+    fetch(`${API_BASE}/api/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ order: newOrder }),
@@ -695,7 +697,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     showToast(`تم تحديث حالة الطلب ${orderId} إلى "${status}"`);
     try {
-      await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+      await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -710,7 +712,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProducts((prev) => [product, ...prev]);
     showToast(`تمت إضافة المنتج الجديد "${product.name}"`);
     try {
-      await fetch('/api/products', {
+      await fetch(`${API_BASE}/api/products`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ product }),
@@ -727,7 +729,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     showToast('تم حفظ التعديلات بنجاح');
     try {
-      await fetch(`/api/products/${productId}`, {
+      await fetch(`${API_BASE}/api/products/${productId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated }),
@@ -742,7 +744,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProducts((prev) => prev.filter((p) => p.id !== productId));
     showToast('تم حذف المنتج بنجاح');
     try {
-      await fetch(`/api/products/${productId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/api/products/${productId}`, { method: 'DELETE' });
       fetchStoreData();
     } catch (e) {
       console.error(e);
@@ -758,7 +760,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setReviews((prev) => [newRev, ...prev]);
     showToast('شكراً لتفكيرك وتقييمك لجزارة صاحب السعادة! ❤️');
     try {
-      await fetch('/api/reviews', {
+      await fetch(`${API_BASE}/api/reviews`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ review: newRev }),

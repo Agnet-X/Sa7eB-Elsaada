@@ -110,6 +110,17 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
+  // CORS Middleware to allow requests from any origin (very helpful when frontend is on Vercel and backend on Render)
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // Real-time SSE endpoint
   app.get('/api/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
