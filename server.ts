@@ -43,6 +43,86 @@ interface StoreData {
 
 let clients: Array<{ id: number; res: express.Response }> = [];
 
+// MongoDB Atlas Integration
+import { MongoClient } from 'mongodb';
+
+const MONGODB_URI = process.env.MONGODB_URI;
+const DB_NAME = 'butchery_saada';
+const COLLECTION_NAME = 'store_state';
+let mongoClient: MongoClient | null = null;
+
+async function getMongoClient() {
+  if (!MONGODB_URI) return null;
+  if (!mongoClient) {
+    mongoClient = new MongoClient(MONGODB_URI);
+    await mongoClient.connect();
+  }
+  return mongoClient;
+}
+
+// Fetch storeData (loads from MongoDB if active, otherwise falls back to local memory/file)
+async function getStoreData(): Promise<StoreData> {
+  if (MONGODB_URI) {
+    try {
+      const client = await getMongoClient();
+      if (client) {
+        const db = client.db(DB_NAME);
+        const col = db.collection(COLLECTION_NAME);
+        const doc = await col.findOne({ _id: 'main' as any });
+        if (doc) {
+          // Merge with default values in case structure changed
+          return {
+            products: doc.products || INITIAL_PRODUCTS,
+            storeSettings: { ...DEFAULT_SETTINGS, ...(doc.storeSettings || {}) },
+            heroVideos: doc.heroVideos || HERO_VIDEOS,
+            galleryVideos: doc.galleryVideos || BUTCHER_SHOWCASE_VIDEOS,
+            offers: doc.offers || TODAY_OFFERS,
+            orders: doc.orders || [],
+            reviews: doc.reviews || INITIAL_REVIEWS,
+          };
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching store data from MongoDB:', err);
+    }
+  }
+  return storeData;
+}
+
+// Save storeData (saves to MongoDB if active, otherwise saves to local file)
+async function persistStoreData(data: StoreData) {
+  storeData = data; // Update in-memory cache
+  if (MONGODB_URI) {
+    try {
+      const client = await getMongoClient();
+      if (client) {
+        const db = client.db(DB_NAME);
+        const col = db.collection(COLLECTION_NAME);
+        await col.updateOne(
+          { _id: 'main' as any },
+          { $set: data },
+          { upsert: true }
+        );
+        broadcastData();
+        return;
+      }
+    } catch (err) {
+      console.error('Error saving store data to MongoDB:', err);
+    }
+  }
+
+  // Fallback to local file persistence
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    broadcastData();
+  } catch (err) {
+    console.error('Error saving store data locally:', err);
+  }
+}
+
 function broadcastData() {
   const payload = `data: ${JSON.stringify(storeData)}\n\n`;
   clients.forEach(c => {
@@ -90,19 +170,14 @@ function loadStoreData(): StoreData {
   return initialData;
 }
 
-function saveStoreData(data: StoreData) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
-    broadcastData();
-  } catch (err) {
-    console.error('Error saving store data:', err);
-  }
-}
-
 let storeData = loadStoreData();
+
+// Init database values if MongoDB is connected
+if (MONGODB_URI) {
+  getStoreData().then(data => {
+    storeData = data;
+  }).catch(console.error);
+}
 
 async function startServer() {
   const app = express();
@@ -122,7 +197,7 @@ async function startServer() {
   });
 
   // Real-time SSE endpoint
-  app.get('/api/events', (req, res) => {
+  app.get('/api/events', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
@@ -130,7 +205,8 @@ async function startServer() {
     res.flushHeaders();
 
     // Send current state immediately upon connection
-    res.write(`data: ${JSON.stringify(storeData)}\n\n`);
+    const currentData = await getStoreData();
+    res.write(`data: ${JSON.stringify(currentData)}\n\n`);
 
     const clientId = Date.now() + Math.random();
     const newClient = { id: clientId, res };
@@ -151,170 +227,190 @@ async function startServer() {
   });
 
   // API Routes with No-Cache Headers
-  app.get('/api/store-data', (req, res) => {
+  app.get('/api/store-data', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    res.json(storeData);
+    const currentData = await getStoreData();
+    res.json(currentData);
   });
 
-  app.post('/api/settings', (req, res) => {
+  app.post('/api/settings', async (req, res) => {
     const { settings } = req.body;
     if (settings) {
-      storeData.storeSettings = { ...storeData.storeSettings, ...settings };
-      saveStoreData(storeData);
+      const currentData = await getStoreData();
+      currentData.storeSettings = { ...currentData.storeSettings, ...settings };
+      await persistStoreData(currentData);
     }
     res.json({ success: true, storeSettings: storeData.storeSettings });
   });
 
   // Products
-  app.post('/api/products', (req, res) => {
+  app.post('/api/products', async (req, res) => {
     const { product } = req.body;
     if (product) {
-      storeData.products = [product, ...storeData.products.filter(p => p.id !== product.id)];
-      saveStoreData(storeData);
+      const currentData = await getStoreData();
+      currentData.products = [product, ...currentData.products.filter(p => p.id !== product.id)];
+      await persistStoreData(currentData);
     }
     res.json({ success: true, products: storeData.products });
   });
 
-  app.put('/api/products/:id', (req, res) => {
+  app.put('/api/products/:id', async (req, res) => {
     const { id } = req.params;
     const { updated } = req.body;
-    storeData.products = storeData.products.map(p => p.id === id ? { ...p, ...updated } : p);
-    saveStoreData(storeData);
+    const currentData = await getStoreData();
+    currentData.products = currentData.products.map(p => p.id === id ? { ...p, ...updated } : p);
+    await persistStoreData(currentData);
     res.json({ success: true, products: storeData.products });
   });
 
-  app.delete('/api/products/:id', (req, res) => {
+  app.delete('/api/products/:id', async (req, res) => {
     const { id } = req.params;
-    storeData.products = storeData.products.filter(p => p.id !== id);
-    saveStoreData(storeData);
+    const currentData = await getStoreData();
+    currentData.products = currentData.products.filter(p => p.id !== id);
+    await persistStoreData(currentData);
     res.json({ success: true, products: storeData.products });
   });
 
   // Offers
-  app.post('/api/offers', (req, res) => {
+  app.post('/api/offers', async (req, res) => {
     const { offer } = req.body;
     if (offer) {
-      storeData.offers = [offer, ...storeData.offers.filter(o => o.id !== offer.id)];
-      saveStoreData(storeData);
+      const currentData = await getStoreData();
+      currentData.offers = [offer, ...currentData.offers.filter(o => o.id !== offer.id)];
+      await persistStoreData(currentData);
     }
     res.json({ success: true, offers: storeData.offers });
   });
 
-  app.put('/api/offers/:id', (req, res) => {
+  app.put('/api/offers/:id', async (req, res) => {
     const { id } = req.params;
     const { updated } = req.body;
-    storeData.offers = storeData.offers.map(o => o.id === id ? { ...o, ...updated } : o);
-    saveStoreData(storeData);
+    const currentData = await getStoreData();
+    currentData.offers = currentData.offers.map(o => o.id === id ? { ...o, ...updated } : o);
+    await persistStoreData(currentData);
     res.json({ success: true, offers: storeData.offers });
   });
 
-  app.delete('/api/offers/:id', (req, res) => {
+  app.delete('/api/offers/:id', async (req, res) => {
     const { id } = req.params;
-    storeData.offers = storeData.offers.filter(o => o.id !== id);
-    saveStoreData(storeData);
+    const currentData = await getStoreData();
+    currentData.offers = currentData.offers.filter(o => o.id !== id);
+    await persistStoreData(currentData);
     res.json({ success: true, offers: storeData.offers });
   });
 
   // Hero Videos
-  app.post('/api/videos/hero', (req, res) => {
+  app.post('/api/videos/hero', async (req, res) => {
     const { video } = req.body;
     if (video) {
-      storeData.heroVideos = [video, ...storeData.heroVideos.filter(v => v.id !== video.id)];
-      saveStoreData(storeData);
+      const currentData = await getStoreData();
+      currentData.heroVideos = [video, ...currentData.heroVideos.filter(v => v.id !== video.id)];
+      await persistStoreData(currentData);
     }
     res.json({ success: true, heroVideos: storeData.heroVideos });
   });
 
-  app.put('/api/videos/hero/:id', (req, res) => {
+  app.put('/api/videos/hero/:id', async (req, res) => {
     const { id } = req.params;
     const { updated } = req.body;
-    storeData.heroVideos = storeData.heroVideos.map(v => v.id === id ? { ...v, ...updated } : v);
-    saveStoreData(storeData);
+    const currentData = await getStoreData();
+    currentData.heroVideos = currentData.heroVideos.map(v => v.id === id ? { ...v, ...updated } : v);
+    await persistStoreData(currentData);
     res.json({ success: true, heroVideos: storeData.heroVideos });
   });
 
-  app.delete('/api/videos/hero/:id', (req, res) => {
+  app.delete('/api/videos/hero/:id', async (req, res) => {
     const { id } = req.params;
-    storeData.heroVideos = storeData.heroVideos.filter(v => v.id !== id);
-    saveStoreData(storeData);
+    const currentData = await getStoreData();
+    currentData.heroVideos = currentData.heroVideos.filter(v => v.id !== id);
+    await persistStoreData(currentData);
     res.json({ success: true, heroVideos: storeData.heroVideos });
   });
 
   // Gallery Videos
-  app.post('/api/videos/gallery', (req, res) => {
+  app.post('/api/videos/gallery', async (req, res) => {
     const { video } = req.body;
     if (video) {
-      storeData.galleryVideos = [video, ...storeData.galleryVideos.filter(v => v.id !== video.id)];
-      saveStoreData(storeData);
+      const currentData = await getStoreData();
+      currentData.galleryVideos = [video, ...currentData.galleryVideos.filter(v => v.id !== video.id)];
+      await persistStoreData(currentData);
     }
     res.json({ success: true, galleryVideos: storeData.galleryVideos });
   });
 
-  app.put('/api/videos/gallery/:id', (req, res) => {
+  app.put('/api/videos/gallery/:id', async (req, res) => {
     const { id } = req.params;
     const { updated } = req.body;
-    storeData.galleryVideos = storeData.galleryVideos.map(v => v.id === id ? { ...v, ...updated } : v);
-    saveStoreData(storeData);
+    const currentData = await getStoreData();
+    currentData.galleryVideos = currentData.galleryVideos.map(v => v.id === id ? { ...v, ...updated } : v);
+    await persistStoreData(currentData);
     res.json({ success: true, galleryVideos: storeData.galleryVideos });
   });
 
-  app.delete('/api/videos/gallery/:id', (req, res) => {
+  app.delete('/api/videos/gallery/:id', async (req, res) => {
     const { id } = req.params;
-    storeData.galleryVideos = storeData.galleryVideos.filter(v => v.id !== id);
-    saveStoreData(storeData);
+    const currentData = await getStoreData();
+    currentData.galleryVideos = currentData.galleryVideos.filter(v => v.id !== id);
+    await persistStoreData(currentData);
     res.json({ success: true, galleryVideos: storeData.galleryVideos });
   });
 
   // Orders
-  app.post('/api/orders', (req, res) => {
+  app.post('/api/orders', async (req, res) => {
     const { order } = req.body;
     if (order) {
-      storeData.orders = [order, ...storeData.orders.filter(o => o.id !== order.id)];
-      saveStoreData(storeData);
+      const currentData = await getStoreData();
+      currentData.orders = [order, ...currentData.orders.filter(o => o.id !== order.id)];
+      await persistStoreData(currentData);
     }
     res.json({ success: true, orders: storeData.orders });
   });
 
-  app.put('/api/orders/:id', (req, res) => {
+  app.put('/api/orders/:id', async (req, res) => {
     const { id } = req.params;
     const { status, updated } = req.body;
-    storeData.orders = storeData.orders.map(o => {
+    const currentData = await getStoreData();
+    currentData.orders = currentData.orders.map(o => {
       if (o.id === id) {
         return { ...o, ...(status ? { status } : {}), ...(updated || {}) };
       }
       return o;
     });
-    saveStoreData(storeData);
+    await persistStoreData(currentData);
     res.json({ success: true, orders: storeData.orders });
   });
 
-  app.delete('/api/orders/all', (req, res) => {
-    storeData.orders = [];
-    saveStoreData(storeData);
+  app.delete('/api/orders/all', async (req, res) => {
+    const currentData = await getStoreData();
+    currentData.orders = [];
+    await persistStoreData(currentData);
     res.json({ success: true, orders: [] });
   });
 
-  app.delete('/api/orders/cancelled', (req, res) => {
-    storeData.orders = storeData.orders.filter(o => o.status !== 'cancelled');
-    saveStoreData(storeData);
+  app.delete('/api/orders/cancelled', async (req, res) => {
+    const currentData = await getStoreData();
+    currentData.orders = currentData.orders.filter(o => o.status !== 'cancelled');
+    await persistStoreData(currentData);
     res.json({ success: true, orders: storeData.orders });
   });
 
-  app.delete('/api/orders/:id', (req, res) => {
+  app.delete('/api/orders/:id', async (req, res) => {
     const { id } = req.params;
-    storeData.orders = storeData.orders.filter(o => o.id !== id);
-    saveStoreData(storeData);
+    const currentData = await getStoreData();
+    currentData.orders = currentData.orders.filter(o => o.id !== id);
+    await persistStoreData(currentData);
     res.json({ success: true, orders: storeData.orders });
   });
 
   // Reviews
-  app.post('/api/reviews', (req, res) => {
+  app.post('/api/reviews', async (req, res) => {
     const { review } = req.body;
     if (review) {
-      storeData.reviews = [review, ...storeData.reviews];
-      saveStoreData(storeData);
+      const currentData = await getStoreData();
+      currentData.reviews = [review, ...currentData.reviews];
+      await persistStoreData(currentData);
     }
     res.json({ success: true, reviews: storeData.reviews });
   });
@@ -334,9 +430,15 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-  });
+  // Only start listening if not running on serverless Vercel environment
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
+    });
+  }
+
+  return app;
 }
 
-startServer();
+const serverPromise = startServer();
+export default serverPromise;
