@@ -1,0 +1,6 @@
+{
+  "name": "جزارة صاحب السعادة",
+  "description": "الموقع الرسمي لجزارة صاحب السعادة - أجود أنواع اللحوم البلدية والجاموسي والبقري والكندوز، العروض اليومية والطلب عبر الواتساب",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
