@@ -13,7 +13,7 @@ export const CheckoutModal: React.FC = () => {
   const [landmark, setLandmark] = useState('');
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
   const [deliveryDate, setDeliveryDate] = useState('');
-  const [deliveryTimeSlot, setDeliveryTimeSlot] = useState('الفترة الصباحية (9 صباحاً - 2 ظهراً)');
+  const [deliveryTimeSlot, setDeliveryTimeSlot] = useState('');
   const [notes, setNotes] = useState('');
 
   // Min date = today
@@ -160,8 +160,10 @@ export const CheckoutModal: React.FC = () => {
               <select
                 value={deliveryTimeSlot}
                 onChange={(e) => setDeliveryTimeSlot(e.target.value)}
+                required
                 className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white focus:outline-none focus:border-amber-400 text-xs"
               >
+                <option value="" disabled>اختر الفترة الزمنية...</option>
                 <option value="الفترة الصباحية (9 صباحاً - 2 ظهراً)">الفترة الصباحية (9ص - 2ظ)</option>
                 <option value="الفترة المسائية (5 مساءً - 9 مساءً)">الفترة المسائية (5م - 9م)</option>
               </select>
