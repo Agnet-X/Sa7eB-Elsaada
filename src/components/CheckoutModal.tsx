@@ -40,11 +40,16 @@ export const CheckoutModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-2xl my-8 bg-[#121218] border border-amber-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl text-slate-100">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
+      onWheel={(e) => e.stopPropagation()}
+    >
+      <div className="relative w-full max-w-2xl my-4 bg-[#121218] border border-amber-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl text-slate-100 max-h-[90vh] overflow-y-auto">
+        {/* Close Button */}
         <button
           onClick={() => setIsCheckoutOpen(false)}
-          className="absolute top-4 left-4 p-2 rounded-full bg-neutral-900 text-slate-400 hover:text-white"
+          className="sticky top-0 float-left z-10 p-2 rounded-full bg-neutral-900 text-slate-400 hover:text-white hover:bg-red-900 transition-colors mb-2"
+          aria-label="إغلاق"
         >
           <X className="w-5 h-5" />
         </button>
