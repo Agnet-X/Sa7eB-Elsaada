@@ -41,7 +41,25 @@ npm run dev
 2. ادخل على [Vercel](https://vercel.com) واضغط **New Project**.
 3. اختر الـ Repository الخاص بك.
 4. اتترك الإعدادات الافتراضية (Framework Preset: **Vite**).
-5. اضغط **Deploy**.
+5. **مهم:** أضف متغير البيئة `MONGODB_URI` (انظر القسم التالي).
+6. اضغط **Deploy**.
+
+### ⚠️ لماذا التعديلات لا تظهر لكل الزوار؟
+
+على Vercel، السيرفر يعمل بنظام **Serverless** — كل زائر قد يصل لنسخة مختلفة من السيرفر، والبيانات **لا تُحفظ على ملفات** بين الطلبات.
+
+**الحل:** ربط قاعدة بيانات MongoDB Atlas (مجانية):
+
+1. أنشئ حساباً على [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) (Free Tier).
+2. أنشئ Cluster جديد → **Connect** → **Drivers** → انسخ رابط الاتصال.
+3. استبدل `<password>` بكلمة مرور المستخدم، وأضف `/butchery_saada` قبل `?` إن لزم.
+4. في Vercel: **Project → Settings → Environment Variables**
+5. أضف: `MONGODB_URI` = رابط الاتصال الكامل
+6. **Redeploy** المشروع.
+
+بعد ذلك، أي تعديل من لوحة الإدارة يُحفظ في MongoDB ويظهر لجميع الزوار.
+
+> **محلياً (`npm run dev`):** البيانات تُحفظ في `data/store-data.json` وتعمل بدون MongoDB.
 
 ---
 تطوير وتنسيق خاص بشركة/محل جزارة صاحب السعادة ✨

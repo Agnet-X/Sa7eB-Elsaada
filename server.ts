@@ -234,6 +234,15 @@ async function startServer() {
     });
   });
 
+  app.get('/api/health', (_req, res) => {
+    const persistence = MONGODB_URI
+      ? 'mongodb'
+      : process.env.VERCEL
+        ? 'memory'
+        : 'file';
+    res.json({ ok: true, persistence });
+  });
+
   // API Routes with No-Cache Headers
   app.get('/api/store-data', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

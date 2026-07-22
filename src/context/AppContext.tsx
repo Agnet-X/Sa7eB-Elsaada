@@ -131,6 +131,9 @@ interface AppContextType {
   toastMessage: string | null;
   showToast: (msg: string) => void;
 
+  // Backend persistence status (mongodb = shared for all visitors)
+  persistenceMode: 'unknown' | 'mongodb' | 'file' | 'memory';
+
   // New Order Notification callback registration (for admin sound alerts)
   setOnNewOrderCallback: (cb: ((count: number) => void) | null) => void;
 }
@@ -174,6 +177,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [persistenceMode, setPersistenceMode] = useState<'unknown' | 'mongodb' | 'file' | 'memory'>('unknown');
+
+  const SAVE_ERROR_MSG = 'فشل الحفظ — التعديلات لن تظهر للزوار. تحقق من إعداد قاعدة البيانات (MongoDB).';
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 3000);
+  };
+
+  const mutateStore = async (
+    optimisticUpdate: () => void,
+    request: () => Promise<Response>,
+    successMessage: string,
+    errorMessage = SAVE_ERROR_MSG
+  ) => {
+    optimisticUpdate();
+    try {
+      const res = await request();
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      showToast(successMessage);
+      await fetchStoreData();
+    } catch (e) {
+      console.error(e);
+      showToast(errorMessage);
+      await fetchStoreData();
+    }
+  };
 
   // Ref to track previous order count for new order notifications
   // -1 = not yet initialized (first fetch should set baseline without triggering sound)
@@ -216,8 +248,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const checkBackendHealth = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/health`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.persistence) setPersistenceMode(data.persistence);
+      }
+    } catch {
+      setPersistenceMode('unknown');
+    }
+  };
+
   useEffect(() => {
     fetchStoreData();
+    checkBackendHealth();
 
     let eventSource: EventSource | null = null;
     const connectSSE = () => {
@@ -302,197 +347,147 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateStoreSettings = async (settings: Partial<StoreSettings>) => {
-    const updated = { ...storeSettings, ...settings };
-    setStoreSettings(updated);
-    showToast('تم حفظ إعدادات المحل والجزارة بنجاح ✨');
-    try {
-      await fetch(`${API_BASE}/api/settings`, {
+    await mutateStore(
+      () => setStoreSettings((prev) => ({ ...prev, ...settings })),
+      () => fetch(`${API_BASE}/api/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error('Failed to update settings on server', e);
-    }
+      }),
+      'تم حفظ إعدادات المحل والجزارة بنجاح ✨'
+    );
   };
 
   const addHeroVideo = async (video: HeroVideo) => {
-    setHeroVideos((prev) => [video, ...prev]);
-    showToast('تمت إضافة فيديو الواجهة الجديد');
-    try {
-      await fetch(`${API_BASE}/api/videos/hero`, {
+    await mutateStore(
+      () => setHeroVideos((prev) => [video, ...prev]),
+      () => fetch(`${API_BASE}/api/videos/hero`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ video }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      'تمت إضافة فيديو الواجهة الجديد'
+    );
   };
 
   const updateHeroVideo = async (id: string, updated: Partial<HeroVideo>) => {
-    setHeroVideos((prev) => prev.map((v) => (v.id === id ? { ...v, ...updated } : v)));
-    showToast('تم تعديل فيديو الواجهة');
-    try {
-      await fetch(`${API_BASE}/api/videos/hero/${id}`, {
+    await mutateStore(
+      () => setHeroVideos((prev) => prev.map((v) => (v.id === id ? { ...v, ...updated } : v))),
+      () => fetch(`${API_BASE}/api/videos/hero/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      'تم تعديل فيديو الواجهة'
+    );
   };
 
   const deleteHeroVideo = async (id: string) => {
-    setHeroVideos((prev) => prev.filter((v) => v.id !== id));
-    showToast('تم حذف فيديو الواجهة');
-    try {
-      await fetch(`${API_BASE}/api/videos/hero/${id}`, { method: 'DELETE' });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+    await mutateStore(
+      () => setHeroVideos((prev) => prev.filter((v) => v.id !== id)),
+      () => fetch(`${API_BASE}/api/videos/hero/${id}`, { method: 'DELETE' }),
+      'تم حذف فيديو الواجهة'
+    );
   };
 
   const addGalleryVideo = async (video: ButcherVideo) => {
-    setGalleryVideos((prev) => [video, ...prev]);
-    showToast('تمت إضافة فيديو للمعرض');
-    try {
-      await fetch(`${API_BASE}/api/videos/gallery`, {
+    await mutateStore(
+      () => setGalleryVideos((prev) => [video, ...prev]),
+      () => fetch(`${API_BASE}/api/videos/gallery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ video }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      'تمت إضافة فيديو للمعرض'
+    );
   };
 
   const updateGalleryVideo = async (id: string, updated: Partial<ButcherVideo>) => {
-    setGalleryVideos((prev) => prev.map((v) => (v.id === id ? { ...v, ...updated } : v)));
-    showToast('تم تعديل فيديو المعرض');
-    try {
-      await fetch(`${API_BASE}/api/videos/gallery/${id}`, {
+    await mutateStore(
+      () => setGalleryVideos((prev) => prev.map((v) => (v.id === id ? { ...v, ...updated } : v))),
+      () => fetch(`${API_BASE}/api/videos/gallery/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      'تم تعديل فيديو المعرض'
+    );
   };
 
   const deleteGalleryVideo = async (id: string) => {
-    setGalleryVideos((prev) => prev.filter((v) => v.id !== id));
-    showToast('تم حذف الفيديو من المعرض');
-    try {
-      await fetch(`${API_BASE}/api/videos/gallery/${id}`, { method: 'DELETE' });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+    await mutateStore(
+      () => setGalleryVideos((prev) => prev.filter((v) => v.id !== id)),
+      () => fetch(`${API_BASE}/api/videos/gallery/${id}`, { method: 'DELETE' }),
+      'تم حذف الفيديو من المعرض'
+    );
   };
 
   const addOffer = async (offer: OfferItem) => {
-    setOffers((prev) => [offer, ...prev]);
-    showToast('تمت إضافة العرض الجديد');
-    try {
-      await fetch(`${API_BASE}/api/offers`, {
+    await mutateStore(
+      () => setOffers((prev) => [offer, ...prev]),
+      () => fetch(`${API_BASE}/api/offers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ offer }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      'تمت إضافة العرض الجديد'
+    );
   };
 
   const updateOffer = async (id: string, updated: Partial<OfferItem>) => {
-    setOffers((prev) => prev.map((o) => (o.id === id ? { ...o, ...updated } : o)));
-    showToast('تم تعديل العرض بنجاح');
-    try {
-      await fetch(`${API_BASE}/api/offers/${id}`, {
+    await mutateStore(
+      () => setOffers((prev) => prev.map((o) => (o.id === id ? { ...o, ...updated } : o))),
+      () => fetch(`${API_BASE}/api/offers/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      'تم تعديل العرض بنجاح'
+    );
   };
 
   const deleteOffer = async (id: string) => {
-    setOffers((prev) => prev.filter((o) => o.id !== id));
-    showToast('تم حذف العرض');
-    try {
-      await fetch(`${API_BASE}/api/offers/${id}`, { method: 'DELETE' });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+    await mutateStore(
+      () => setOffers((prev) => prev.filter((o) => o.id !== id)),
+      () => fetch(`${API_BASE}/api/offers/${id}`, { method: 'DELETE' }),
+      'تم حذف العرض'
+    );
   };
 
   const updateOrder = async (orderId: string, updated: Partial<Order>) => {
-    setOrders((prev) => prev.map((ord) => (ord.id === orderId ? { ...ord, ...updated } : ord)));
-    showToast(`تم تعديل تفاصيل الطلب ${orderId}`);
-    try {
-      await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, {
+    await mutateStore(
+      () => setOrders((prev) => prev.map((ord) => (ord.id === orderId ? { ...ord, ...updated } : ord))),
+      () => fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      `تم تعديل تفاصيل الطلب ${orderId}`
+    );
   };
 
   const deleteOrder = async (orderId: string) => {
-    setOrders((prev) => prev.filter((ord) => ord.id !== orderId));
-    showToast(`تم حذف الطلب ${orderId} بنجاح 🗑️`);
-    try {
-      await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, { method: 'DELETE' });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+    await mutateStore(
+      () => setOrders((prev) => prev.filter((ord) => ord.id !== orderId)),
+      () => fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, { method: 'DELETE' }),
+      `تم حذف الطلب ${orderId} بنجاح 🗑️`
+    );
   };
 
   const clearAllOrders = async () => {
-    setOrders([]);
-    showToast('تم مسح جميع الاوردرات بنجاح 🗑️');
-    try {
-      await fetch(`${API_BASE}/api/orders/all`, { method: 'DELETE' });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+    await mutateStore(
+      () => setOrders([]),
+      () => fetch(`${API_BASE}/api/orders/all`, { method: 'DELETE' }),
+      'تم مسح جميع الاوردرات بنجاح 🗑️'
+    );
   };
 
   const clearCancelledOrders = async () => {
-    setOrders((prev) => prev.filter((ord) => ord.status !== 'cancelled'));
-    showToast('تم مسح جميع الاوردرات الملغية 🗑️');
-    try {
-      await fetch(`${API_BASE}/api/orders/cancelled`, { method: 'DELETE' });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage((prev) => (prev === msg ? null : prev));
-    }, 3000);
+    await mutateStore(
+      () => setOrders((prev) => prev.filter((ord) => ord.status !== 'cancelled')),
+      () => fetch(`${API_BASE}/api/orders/cancelled`, { method: 'DELETE' }),
+      'تم مسح جميع الاوردرات الملغية 🗑️'
+    );
   };
 
   const addToCart = (
@@ -692,63 +687,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateOrderStatus = async (orderId: string, status: Order['status']) => {
-    setOrders((prev) =>
-      prev.map((ord) => (ord.id === orderId ? { ...ord, status } : ord))
-    );
-    showToast(`تم تحديث حالة الطلب ${orderId} إلى "${status}"`);
-    try {
-      await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, {
+    await mutateStore(
+      () => setOrders((prev) =>
+        prev.map((ord) => (ord.id === orderId ? { ...ord, status } : ord))
+      ),
+      () => fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      `تم تحديث حالة الطلب ${orderId} إلى "${status}"`
+    );
   };
 
   const addProduct = async (product: Product) => {
-    setProducts((prev) => [product, ...prev]);
-    showToast(`تمت إضافة المنتج الجديد "${product.name}"`);
-    try {
-      await fetch(`${API_BASE}/api/products`, {
+    await mutateStore(
+      () => setProducts((prev) => [product, ...prev]),
+      () => fetch(`${API_BASE}/api/products`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ product }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      `تمت إضافة المنتج الجديد "${product.name}"`
+    );
   };
 
   const updateProduct = async (productId: string, updated: Partial<Product>) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, ...updated } : p))
-    );
-    showToast('تم حفظ التعديلات بنجاح');
-    try {
-      await fetch(`${API_BASE}/api/products/${productId}`, {
+    await mutateStore(
+      () => setProducts((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, ...updated } : p))
+      ),
+      () => fetch(`${API_BASE}/api/products/${productId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      'تم حفظ التعديلات بنجاح'
+    );
   };
 
   const deleteProduct = async (productId: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
-    showToast('تم حذف المنتج بنجاح');
-    try {
-      await fetch(`${API_BASE}/api/products/${productId}`, { method: 'DELETE' });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+    await mutateStore(
+      () => setProducts((prev) => prev.filter((p) => p.id !== productId)),
+      () => fetch(`${API_BASE}/api/products/${productId}`, { method: 'DELETE' }),
+      'تم حذف المنتج بنجاح'
+    );
   };
 
   const addReview = async (review: Omit<Review, 'id' | 'date'>) => {
@@ -757,18 +740,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `rev-${Date.now()}`,
       date: 'الآن'
     };
-    setReviews((prev) => [newRev, ...prev]);
-    showToast('شكراً لتفكيرك وتقييمك لجزارة صاحب السعادة! ❤️');
-    try {
-      await fetch(`${API_BASE}/api/reviews`, {
+    await mutateStore(
+      () => setReviews((prev) => [newRev, ...prev]),
+      () => fetch(`${API_BASE}/api/reviews`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ review: newRev }),
-      });
-      fetchStoreData();
-    } catch (e) {
-      console.error(e);
-    }
+      }),
+      'شكراً لتفكيرك وتقييمك لجزارة صاحب السعادة! ❤️'
+    );
   };
 
   const setOnNewOrderCallback = (cb: ((count: number) => void) | null) => {
@@ -842,6 +822,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedProduct,
         toastMessage,
         showToast,
+        persistenceMode,
         setOnNewOrderCallback
       }}
     >
