@@ -6,6 +6,8 @@ import { INITIAL_PRODUCTS } from './src/data/products.js';
 import { INITIAL_REVIEWS } from './src/data/reviews.js';
 import { HERO_VIDEOS, BUTCHER_SHOWCASE_VIDEOS } from './src/data/videos.js';
 import { TODAY_OFFERS } from './src/data/offers.js';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'store-data.json');
@@ -43,78 +45,57 @@ interface StoreData {
 
 let clients: Array<{ id: number; res: express.Response }> = [];
 
-// MongoDB Atlas Integration
-import { MongoClient } from 'mongodb';
-
-const MONGODB_URI = process.env.MONGODB_URI;
-const DB_NAME = 'butchery_saada';
-const COLLECTION_NAME = 'store_state';
+const FIREBASE_SERVICE_ACCOUNT = process.env.FIREBASE_SERVICE_ACCOUNT;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
-let mongoClient: MongoClient | null = null;
 
-async function getMongoClient() {
-  if (!MONGODB_URI) return null;
-  if (!mongoClient) {
-    mongoClient = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
-    await mongoClient.connect();
-  }
-  return mongoClient;
+function getFirestoreDb() {
+  if (!FIREBASE_SERVICE_ACCOUNT) return null;
+
+  const serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT);
+  const app = getApps()[0] ?? initializeApp({ credential: cert(serviceAccount) });
+  return getFirestore(app);
 }
 
-// Fetch storeData (loads from MongoDB if active, otherwise falls back to local memory/file)
+// Fetch store data from Firestore when configured, otherwise use local development storage.
 async function getStoreData(): Promise<StoreData> {
-  if (MONGODB_URI) {
+  if (FIREBASE_SERVICE_ACCOUNT) {
     try {
-      const client = await getMongoClient();
-      if (client) {
-        const db = client.db(DB_NAME);
-        const col = db.collection(COLLECTION_NAME);
-        const doc = await col.findOne({ _id: 'main' as any });
-        if (doc) {
-          // Merge with default values in case structure changed
-          return {
-            products: doc.products || INITIAL_PRODUCTS,
-            storeSettings: { ...DEFAULT_SETTINGS, ...(doc.storeSettings || {}) },
-            heroVideos: doc.heroVideos || HERO_VIDEOS,
-            galleryVideos: doc.galleryVideos || BUTCHER_SHOWCASE_VIDEOS,
-            offers: doc.offers || TODAY_OFFERS,
-            orders: doc.orders || [],
-            reviews: doc.reviews || INITIAL_REVIEWS,
-          };
-        }
+      const snapshot = await getFirestoreDb()?.collection('store_state').doc('main').get();
+      const data = snapshot?.data();
+      if (data) {
+        return {
+          products: data.products || INITIAL_PRODUCTS,
+          storeSettings: { ...DEFAULT_SETTINGS, ...(data.storeSettings || {}) },
+          heroVideos: data.heroVideos || HERO_VIDEOS,
+          galleryVideos: data.galleryVideos || BUTCHER_SHOWCASE_VIDEOS,
+          offers: data.offers || TODAY_OFFERS,
+          orders: data.orders || [],
+          reviews: data.reviews || INITIAL_REVIEWS,
+        };
       }
     } catch (err) {
-      console.error('Error fetching store data from MongoDB:', err);
+      console.error('Error fetching store data from Firestore:', err);
     }
   }
   return storeData;
 }
 
-// Save storeData to MongoDB in production. Local files are only safe for development.
+// Production writes must go to Firestore so every visitor receives the same data.
 async function persistStoreData(data: StoreData) {
   storeData = data; // Update in-memory cache
-  if (MONGODB_URI) {
+  if (FIREBASE_SERVICE_ACCOUNT) {
     try {
-      const client = await getMongoClient();
-      if (client) {
-        const db = client.db(DB_NAME);
-        const col = db.collection(COLLECTION_NAME);
-        await col.updateOne(
-          { _id: 'main' as any },
-          { $set: data },
-          { upsert: true }
-        );
-        broadcastData();
-        return;
-      }
+      await getFirestoreDb()?.collection('store_state').doc('main').set(data);
+      broadcastData();
+      return;
     } catch (err) {
-      console.error('Error saving store data to MongoDB:', err);
+      console.error('Error saving store data to Firestore:', err);
       if (IS_PRODUCTION) throw err;
     }
   }
 
   if (IS_PRODUCTION) {
-    throw new Error('MONGODB_URI is required to save shared store data in production.');
+    throw new Error('FIREBASE_SERVICE_ACCOUNT is required to save shared store data in production.');
   }
 
   // Fallback to local file persistence
@@ -178,8 +159,8 @@ function loadStoreData(): StoreData {
 
 let storeData = loadStoreData();
 
-// Init database values if MongoDB is connected
-if (MONGODB_URI) {
+// Initialize the cached state from Firestore when it is configured.
+if (FIREBASE_SERVICE_ACCOUNT) {
   getStoreData().then(data => {
     storeData = data;
   }).catch(console.error);
@@ -195,10 +176,10 @@ async function startServer() {
   // Reject writes explicitly rather than reporting a successful save that will disappear.
   app.use('/api', (req, res, next) => {
     const isWriteRequest = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
-    if (IS_PRODUCTION && isWriteRequest && !MONGODB_URI) {
+    if (IS_PRODUCTION && isWriteRequest && !FIREBASE_SERVICE_ACCOUNT) {
       return res.status(503).json({
         success: false,
-        error: 'Shared data storage is not configured. Set MONGODB_URI before saving changes.',
+        error: 'Shared data storage is not configured. Set FIREBASE_SERVICE_ACCOUNT before saving changes.',
       });
     }
     next();
@@ -254,8 +235,8 @@ async function startServer() {
   });
 
   app.get('/api/health', (_req, res) => {
-    const persistence = MONGODB_URI ? 'mongodb' : IS_PRODUCTION ? 'unconfigured' : 'file';
-    res.json({ ok: true, persistence, sharedDataReady: Boolean(MONGODB_URI) || !IS_PRODUCTION });
+    const persistence = FIREBASE_SERVICE_ACCOUNT ? 'firestore' : IS_PRODUCTION ? 'unconfigured' : 'file';
+    res.json({ ok: true, persistence, sharedDataReady: Boolean(FIREBASE_SERVICE_ACCOUNT) || !IS_PRODUCTION });
   });
 
   // API Routes with No-Cache Headers

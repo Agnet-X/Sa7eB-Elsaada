@@ -41,25 +41,24 @@ npm run dev
 2. ادخل على [Vercel](https://vercel.com) واضغط **New Project**.
 3. اختر الـ Repository الخاص بك.
 4. اتترك الإعدادات الافتراضية (Framework Preset: **Vite**).
-5. **مهم:** أضف متغير البيئة `MONGODB_URI` (انظر القسم التالي).
+5. **مهم:** أضف متغير البيئة `FIREBASE_SERVICE_ACCOUNT` (انظر القسم التالي).
 6. اضغط **Deploy**.
 
 ### ⚠️ لماذا التعديلات لا تظهر لكل الزوار؟
 
 على Vercel، السيرفر يعمل بنظام **Serverless** — كل زائر قد يصل لنسخة مختلفة من السيرفر، والبيانات **لا تُحفظ على ملفات** بين الطلبات.
 
-**الحل:** ربط قاعدة بيانات MongoDB Atlas (مجانية):
+**الحل:** ربط Firebase Firestore (مجاني):
 
-1. أنشئ حساباً على [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) (Free Tier).
-2. أنشئ Cluster جديد → **Connect** → **Drivers** → انسخ رابط الاتصال.
-3. استبدل `<password>` بكلمة مرور المستخدم، وأضف `/butchery_saada` قبل `?` إن لزم.
-4. في Vercel: **Project → Settings → Environment Variables**
-5. أضف: `MONGODB_URI` = رابط الاتصال الكامل
-6. **Redeploy** المشروع.
+1. أنشئ مشروعاً في [Firebase Console](https://console.firebase.google.com/) ثم افتح **Build → Firestore Database** واضغط **Create database**.
+2. اختر **Production mode** وحدد أقرب منطقة متاحة، ثم أنشئ القاعدة.
+3. افتح **Project settings → Service accounts** واضغط **Generate new private key** لتحميل ملف JSON.
+4. في Vercel: **Project → Settings → Environment Variables** أضف `FIREBASE_SERVICE_ACCOUNT` والصق محتوى ملف JSON كاملاً في سطر واحد، مع تفعيل **Sensitive**.
+5. احذف متغير `MONGODB_URI` القديم ثم نفذ **Redeploy** للمشروع.
 
-بعد ذلك، أي تعديل من لوحة الإدارة يُحفظ في MongoDB ويظهر لجميع الزوار. بدون `MONGODB_URI` لن يسمح الموقع بحفظ تعديلات لوحة الإدارة في الإنتاج، حتى لا تظهر رسالة نجاح لتعديل مؤقت يختفي لاحقاً.
+بعد ذلك، أي تعديل من لوحة الإدارة يُحفظ في Firestore ويظهر لجميع الزوار. بدون `FIREBASE_SERVICE_ACCOUNT` لن يسمح الموقع بحفظ تعديلات لوحة الإدارة في الإنتاج، حتى لا تظهر رسالة نجاح لتعديل مؤقت يختفي لاحقاً.
 
-> **محلياً (`npm run dev`):** البيانات تُحفظ في `data/store-data.json` وتعمل بدون MongoDB.
+> **محلياً (`npm run dev`):** البيانات تُحفظ في `data/store-data.json` وتعمل بدون Firebase.
 
 ---
 تطوير وتنسيق خاص بشركة/محل جزارة صاحب السعادة ✨

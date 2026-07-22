@@ -268,7 +268,7 @@ export const AdminDashboard: React.FC = () => {
           </form>
 
           <p className="text-[11px] text-gray-500 font-mono">
-            * التغييرات تُحفظ على السيرفر وتظهر لجميع الزوار عند ربط قاعدة بيانات MongoDB.
+            * التغييرات تُحفظ على السيرفر وتظهر لجميع الزوار عند ربط Firebase Firestore.
           </p>
         </div>
       </div>
@@ -388,7 +388,7 @@ export const AdminDashboard: React.FC = () => {
               <p className="font-bold text-amber-300">تحذير: التعديلات قد لا تظهر لكل الزوار</p>
               <p className="mt-1 text-amber-100/90">
                 {persistenceMode === 'memory' || persistenceMode === 'unconfigured'
-                  ? 'قاعدة البيانات غير مربوطة. أضف متغير MONGODB_URI في إعدادات Vercel ثم أعد النشر.'
+                  ? 'قاعدة البيانات غير مربوطة. أضف متغير FIREBASE_SERVICE_ACCOUNT في إعدادات Vercel ثم أعد النشر.'
                   : 'تعذّر الاتصال بالسيرفر. تأكد أن الموقع يعمل وأن API متاح.'}
               </p>
             </div>

@@ -131,8 +131,8 @@ interface AppContextType {
   toastMessage: string | null;
   showToast: (msg: string) => void;
 
-  // Backend persistence status (mongodb = shared for all visitors)
-  persistenceMode: 'unknown' | 'mongodb' | 'file' | 'memory' | 'unconfigured';
+  // Backend persistence status (firestore = shared for all visitors)
+  persistenceMode: 'unknown' | 'firestore' | 'file' | 'memory' | 'unconfigured';
 
   // New Order Notification callback registration (for admin sound alerts)
   setOnNewOrderCallback: (cb: ((count: number) => void) | null) => void;
@@ -177,9 +177,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [persistenceMode, setPersistenceMode] = useState<'unknown' | 'mongodb' | 'file' | 'memory' | 'unconfigured'>('unknown');
+  const [persistenceMode, setPersistenceMode] = useState<'unknown' | 'firestore' | 'file' | 'memory' | 'unconfigured'>('unknown');
 
-  const SAVE_ERROR_MSG = 'فشل الحفظ — التعديلات لن تظهر للزوار. تحقق من إعداد قاعدة البيانات (MongoDB).';
+  const SAVE_ERROR_MSG = 'فشل الحفظ — التعديلات لن تظهر للزوار. تحقق من إعداد Firebase Firestore.';
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
