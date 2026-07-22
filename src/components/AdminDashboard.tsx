@@ -96,7 +96,8 @@ export const AdminDashboard: React.FC = () => {
     storeSettings,
     updateStoreSettings,
     showToast,
-    setOnNewOrderCallback
+    setOnNewOrderCallback,
+    persistenceMode
   } = useApp();
 
   // New order sound notification state
@@ -267,7 +268,7 @@ export const AdminDashboard: React.FC = () => {
           </form>
 
           <p className="text-[11px] text-gray-500 font-mono">
-            * هذا النموذج محمي، وجميع التغييرات تُحفظ مباشرة في النظام.
+            * التغييرات تُحفظ على السيرفر وتظهر لجميع الزوار عند ربط Firebase Firestore.
           </p>
         </div>
       </div>
@@ -379,6 +380,22 @@ export const AdminDashboard: React.FC = () => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-md overflow-y-auto">
       <div className="relative w-full max-w-7xl my-4 bg-[#0f0f13] border border-amber-500/40 rounded-3xl p-4 sm:p-8 shadow-2xl text-slate-100 min-h-[85vh] flex flex-col justify-between">
+
+        {persistenceMode === 'error' && (
+          <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-500/50 bg-red-500/10 px-4 py-3 text-red-200">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+            <div className="text-sm leading-relaxed">
+              <p className="font-bold text-red-300">خطأ في الاتصال بـ Firebase</p>
+              <p className="mt-1 text-red-100/90">تعذّر الاتصال بقاعدة البيانات. تحقق من إعدادات Firebase وقواعد Firestore Security Rules.</p>
+            </div>
+          </div>
+        )}
+        {persistenceMode === 'firestore' && (
+          <div className="mb-4 flex items-start gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-emerald-200">
+            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+            <p className="text-xs font-bold text-emerald-300">متصل بـ Firebase Firestore — التعديلات تظهر لحظياً لجميع الزوار ✅</p>
+          </div>
+        )}
         
         {/* Top Header Bar */}
         <div className="flex flex-wrap items-center justify-between pb-4 border-b border-white/10 gap-4">
