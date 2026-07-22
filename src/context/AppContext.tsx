@@ -1,11 +1,16 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Product, CartItem, Order, Review, MeatCategory, CuttingMethod, PackagingType, FatLevel, HeroVideo, ButcherVideo, OfferItem, StoreSettings } from '../types';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import {
+  Product, CartItem, Order, Review, MeatCategory, CuttingMethod,
+  PackagingType, FatLevel, HeroVideo, ButcherVideo, OfferItem, StoreSettings
+} from '../types';
 import { INITIAL_PRODUCTS } from '../data/products';
 import { INITIAL_REVIEWS } from '../data/reviews';
 import { HERO_VIDEOS, BUTCHER_SHOWCASE_VIDEOS } from '../data/videos';
 import { TODAY_OFFERS } from '../data/offers';
 
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const STORE_DOC = 'store_state/main';
 
 const DEFAULT_SETTINGS: StoreSettings = {
   phone1: '01124795553',
@@ -17,8 +22,6 @@ const DEFAULT_SETTINGS: StoreSettings = {
   workingHours: 'يومياً من 8 صباحاً حتى 12 منتصف الليل',
   gmapsLink: 'https://maps.app.goo.gl/UzvBcroJ8unswcgC7',
   adminPin: '5553',
-
-  // Real-time Controls
   todaySlaughterNote: 'كندوز بلدي صغير (لباني) 🥩 - ذبح اليوم طازج 100% بختم المحافظة الوردي',
   todaySlaughterType: 'كندوز صغير (لباني)',
   todaySlaughterStatus: true,
@@ -38,34 +41,22 @@ interface AppContextType {
   setMeatAgeFilter: (filter: 'all' | 'small' | 'large' | 'medium') => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
-  
-  // Dynamic Content (Videos, Offers, Settings)
   heroVideos: HeroVideo[];
   galleryVideos: ButcherVideo[];
   offers: OfferItem[];
   storeSettings: StoreSettings;
-  updateStoreSettings: (settings: Partial<StoreSettings>) => void;
-  addHeroVideo: (video: HeroVideo) => void;
-  updateHeroVideo: (id: string, updated: Partial<HeroVideo>) => void;
-  deleteHeroVideo: (id: string) => void;
-  addGalleryVideo: (video: ButcherVideo) => void;
-  updateGalleryVideo: (id: string, updated: Partial<ButcherVideo>) => void;
-  deleteGalleryVideo: (id: string) => void;
-  addOffer: (offer: OfferItem) => void;
-  updateOffer: (id: string, updated: Partial<OfferItem>) => void;
-  deleteOffer: (id: string) => void;
-
-  // Cart
+  updateStoreSettings: (settings: Partial<StoreSettings>) => Promise<void>;
+  addHeroVideo: (video: HeroVideo) => Promise<void>;
+  updateHeroVideo: (id: string, updated: Partial<HeroVideo>) => Promise<void>;
+  deleteHeroVideo: (id: string) => Promise<void>;
+  addGalleryVideo: (video: ButcherVideo) => Promise<void>;
+  updateGalleryVideo: (id: string, updated: Partial<ButcherVideo>) => Promise<void>;
+  deleteGalleryVideo: (id: string) => Promise<void>;
+  addOffer: (offer: OfferItem) => Promise<void>;
+  updateOffer: (id: string, updated: Partial<OfferItem>) => Promise<void>;
+  deleteOffer: (id: string) => Promise<void>;
   cart: CartItem[];
-  addToCart: (
-    product: Product, 
-    weightKg: number, 
-    weightLabel: string, 
-    cutting: CuttingMethod, 
-    packaging: PackagingType, 
-    fatLevel?: FatLevel, 
-    notes?: string
-  ) => void;
+  addToCart: (product: Product, weightKg: number, weightLabel: string, cutting: CuttingMethod, packaging: PackagingType, fatLevel?: FatLevel, notes?: string) => void;
   removeFromCart: (cartItemId: string) => void;
   updateCartItem: (cartItemId: string, weightKg: number, weightLabel: string) => void;
   clearCart: () => void;
@@ -74,73 +65,47 @@ interface AppContextType {
   cartTotal: number;
   isCartOpen: boolean;
   setIsCartOpen: (open: boolean) => void;
-
-  // Wishlist
   wishlist: string[];
   toggleWishlist: (productId: string) => void;
-
-  // Compare
   compareList: Product[];
   toggleCompare: (product: Product) => void;
   clearCompare: () => void;
   isCompareOpen: boolean;
   setIsCompareOpen: (open: boolean) => void;
-
-  // Checkout & Orders
   isCheckoutOpen: boolean;
   setIsCheckoutOpen: (open: boolean) => void;
   orders: Order[];
-  placeOrder: (customerInfo: {
-    customerName: string;
-    customerPhone: string;
-    address: string;
-    landmark?: string;
-    deliveryType: 'delivery' | 'pickup';
-    deliveryDate: string;
-    deliveryTimeSlot: string;
-    notes?: string;
-  }) => Order;
+  placeOrder: (customerInfo: { customerName: string; customerPhone: string; address: string; landmark?: string; deliveryType: 'delivery' | 'pickup'; deliveryDate: string; deliveryTimeSlot: string; notes?: string; }) => Order;
   lastOrder: Order | null;
   isOrderSuccessOpen: boolean;
   setIsOrderSuccessOpen: (open: boolean) => void;
-  updateOrderStatus: (orderId: string, status: Order['status']) => void;
-  updateOrder: (orderId: string, updated: Partial<Order>) => void;
-  deleteOrder: (orderId: string) => void;
-  clearAllOrders: () => void;
-  clearCancelledOrders: () => void;
-
-  // Admin Auth & Controls
+  updateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
+  updateOrder: (orderId: string, updated: Partial<Order>) => Promise<void>;
+  deleteOrder: (orderId: string) => Promise<void>;
+  clearAllOrders: () => Promise<void>;
+  clearCancelledOrders: () => Promise<void>;
   isAdminOpen: boolean;
   setIsAdminOpen: (open: boolean) => void;
   isAdminAuthenticated: boolean;
   loginAdmin: (pin: string) => boolean;
   logoutAdmin: () => void;
-  addProduct: (product: Product) => void;
-  updateProduct: (productId: string, updated: Partial<Product>) => void;
-  deleteProduct: (productId: string) => void;
-
-  // Reviews
+  addProduct: (product: Product) => Promise<void>;
+  updateProduct: (productId: string, updated: Partial<Product>) => Promise<void>;
+  deleteProduct: (productId: string) => Promise<void>;
   reviews: Review[];
-  addReview: (review: Omit<Review, 'id' | 'date'>) => void;
-
-  // Selected Product Modal
+  addReview: (review: Omit<Review, 'id' | 'date'>) => Promise<void>;
   selectedProduct: Product | null;
   setSelectedProduct: (p: Product | null) => void;
-
-  // Toast Notification
   toastMessage: string | null;
   showToast: (msg: string) => void;
-
-  // Backend persistence status (firestore = shared for all visitors)
-  persistenceMode: 'unknown' | 'firestore' | 'file' | 'memory' | 'unconfigured';
-
-  // New Order Notification callback registration (for admin sound alerts)
+  persistenceMode: 'firestore' | 'loading' | 'error';
   setOnNewOrderCallback: (cb: ((count: number) => void) | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // --- Store state (comes from Firestore) ---
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [heroVideos, setHeroVideos] = useState<HeroVideo[]>(HERO_VIDEOS);
   const [galleryVideos, setGalleryVideos] = useState<ButcherVideo[]>(BUTCHER_SHOWCASE_VIDEOS);
@@ -148,28 +113,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
   const [orders, setOrders] = useState<Order[]>([]);
   const [reviews, setReviews] = useState<Review[]>(INITIAL_REVIEWS);
+  const [persistenceMode, setPersistenceMode] = useState<'firestore' | 'loading' | 'error'>('loading');
 
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('saada_admin_authed') === 'true';
-  });
-
+  // --- Local UI state ---
   const [activeCategory, setActiveCategory] = useState<MeatCategory>('all');
   const [meatAgeFilter, setMeatAgeFilter] = useState<'all' | 'small' | 'large' | 'medium'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() =>
+    sessionStorage.getItem('saada_admin_authed') === 'true'
+  );
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('saada_cart');
     return saved ? JSON.parse(saved) : [];
   });
-
   const [wishlist, setWishlist] = useState<string[]>(() => {
     const saved = localStorage.getItem('saada_wishlist');
     return saved ? JSON.parse(saved) : [];
   });
-
   const [compareList, setCompareList] = useState<Product[]>([]);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
-
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrderSuccessOpen, setIsOrderSuccessOpen] = useState(false);
@@ -177,157 +139,93 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [persistenceMode, setPersistenceMode] = useState<'unknown' | 'firestore' | 'file' | 'memory' | 'unconfigured'>('unknown');
 
-  const SAVE_ERROR_MSG = 'فشل الحفظ — التعديلات لن تظهر للزوار. تحقق من إعداد Firebase Firestore.';
+  const prevOrderCountRef = useRef<number>(-1);
+  const onNewOrderRef = useRef<((count: number) => void) | null>(null);
 
+  // --- Helpers ---
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage((prev) => (prev === msg ? null : prev));
-    }, 3000);
+    setTimeout(() => setToastMessage(prev => (prev === msg ? null : prev)), 3500);
   };
 
-  const mutateStore = async (
-    optimisticUpdate: () => void,
-    request: () => Promise<Response>,
-    successMessage: string,
-    errorMessage = SAVE_ERROR_MSG
-  ) => {
-    optimisticUpdate();
-    try {
-      const res = await request();
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      showToast(successMessage);
-      await fetchStoreData();
-    } catch (e) {
-      console.error(e);
-      showToast(errorMessage);
-      await fetchStoreData();
-    }
+  /** Write the full store document to Firestore */
+  const persistToFirestore = async (data: {
+    products?: Product[];
+    storeSettings?: StoreSettings;
+    heroVideos?: HeroVideo[];
+    galleryVideos?: ButcherVideo[];
+    offers?: OfferItem[];
+    orders?: Order[];
+    reviews?: Review[];
+  }) => {
+    const storeDocRef = doc(db, 'store_state', 'main');
+    await setDoc(storeDocRef, data, { merge: true });
   };
 
-  // Ref to track previous order count for new order notifications
-  // -1 = not yet initialized (first fetch should set baseline without triggering sound)
-  const prevOrderCountRef = React.useRef<number>(-1);
-  // Callback ref so the SSE handler always reads current state
-  const onNewOrderRef = React.useRef<((count: number) => void) | null>(null);
+  // --- Firestore real-time listener (onSnapshot) ---
+  useEffect(() => {
+    const storeDocRef = doc(db, 'store_state', 'main');
 
-  // Fetch shared store data from backend API
-  const fetchStoreData = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/store-data`);
-      if (res.ok) {
-        const data = await res.json();
-        // Only update each field if it exists and is a valid array/object
+    const unsubscribe = onSnapshot(
+      storeDocRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          // First time: seed Firestore with initial data
+          const initialData = {
+            products: INITIAL_PRODUCTS,
+            storeSettings: DEFAULT_SETTINGS,
+            heroVideos: HERO_VIDEOS,
+            galleryVideos: BUTCHER_SHOWCASE_VIDEOS,
+            offers: TODAY_OFFERS,
+            orders: [],
+            reviews: INITIAL_REVIEWS,
+          };
+          setDoc(storeDocRef, initialData).catch(console.error);
+          setPersistenceMode('firestore');
+          return;
+        }
+
+        const data = snapshot.data();
         if (Array.isArray(data.products)) setProducts(data.products);
-        if (data.storeSettings && typeof data.storeSettings === 'object') setStoreSettings(data.storeSettings);
+        if (data.storeSettings) setStoreSettings(prev => ({ ...DEFAULT_SETTINGS, ...prev, ...data.storeSettings }));
         if (Array.isArray(data.heroVideos)) setHeroVideos(data.heroVideos);
         if (Array.isArray(data.galleryVideos)) setGalleryVideos(data.galleryVideos);
         if (Array.isArray(data.offers)) setOffers(data.offers);
+        if (Array.isArray(data.reviews)) setReviews(data.reviews);
+
         if (Array.isArray(data.orders)) {
           setOrders(prev => {
+            const newOrders: Order[] = data.orders;
             if (prevOrderCountRef.current === -1) {
-              // First fetch: set baseline count, don't notify
-              prevOrderCountRef.current = data.orders.length;
-            } else if (data.orders.length > prevOrderCountRef.current) {
-              // Subsequent fetches: new orders detected!
-              const newCount = data.orders.length - prevOrderCountRef.current;
+              prevOrderCountRef.current = newOrders.length;
+            } else if (newOrders.length > prevOrderCountRef.current) {
+              const newCount = newOrders.length - prevOrderCountRef.current;
               if (onNewOrderRef.current) onNewOrderRef.current(newCount);
-              prevOrderCountRef.current = data.orders.length;
+              prevOrderCountRef.current = newOrders.length;
             } else {
-              prevOrderCountRef.current = data.orders.length;
+              prevOrderCountRef.current = newOrders.length;
             }
-            return data.orders;
+            return newOrders;
           });
         }
-        if (Array.isArray(data.reviews)) setReviews(data.reviews);
-      }
-    } catch (e) {
-      console.warn('Could not sync with backend store API:', e);
-    }
-  };
 
-  const checkBackendHealth = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/health`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.persistence) setPersistenceMode(data.persistence);
+        setPersistenceMode('firestore');
+      },
+      (error) => {
+        console.error('Firestore onSnapshot error:', error);
+        setPersistenceMode('error');
       }
-    } catch {
-      setPersistenceMode('unknown');
-    }
-  };
+    );
 
-  useEffect(() => {
-    fetchStoreData();
-    checkBackendHealth();
-
-    let eventSource: EventSource | null = null;
-    const connectSSE = () => {
-      try {
-        eventSource = new EventSource(`${API_BASE}/api/events`);
-        eventSource.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            // Only update each field if it exists and is a valid array/object
-            if (Array.isArray(data.products)) setProducts(data.products);
-            if (data.storeSettings && typeof data.storeSettings === 'object') setStoreSettings(data.storeSettings);
-            if (Array.isArray(data.heroVideos)) setHeroVideos(data.heroVideos);
-            if (Array.isArray(data.galleryVideos)) setGalleryVideos(data.galleryVideos);
-            if (Array.isArray(data.offers)) setOffers(data.offers);
-            if (Array.isArray(data.orders)) {
-              setOrders(prev => {
-                if (prevOrderCountRef.current === -1) {
-                  // First SSE event: set baseline count, don't notify
-                  prevOrderCountRef.current = data.orders.length;
-                } else if (data.orders.length > prevOrderCountRef.current) {
-                  // Subsequent SSE events: new orders detected!
-                  const newCount = data.orders.length - prevOrderCountRef.current;
-                  if (onNewOrderRef.current) onNewOrderRef.current(newCount);
-                  prevOrderCountRef.current = data.orders.length;
-                } else {
-                  prevOrderCountRef.current = data.orders.length;
-                }
-                return data.orders;
-              });
-            }
-            if (Array.isArray(data.reviews)) setReviews(data.reviews);
-          } catch (err) {
-            console.error('Failed to parse SSE data:', err);
-          }
-        };
-        eventSource.onerror = () => {
-          // On error, close and reconnect after 5s
-          eventSource?.close();
-          setTimeout(connectSSE, 5000);
-        };
-      } catch (err) {
-        console.warn('SSE not supported or connection error:', err);
-      }
-    };
-    connectSSE();
-
-    const interval = setInterval(fetchStoreData, 5000);
-    window.addEventListener('focus', fetchStoreData);
-    return () => {
-      if (eventSource) {
-        eventSource.close();
-      }
-      clearInterval(interval);
-      window.removeEventListener('focus', fetchStoreData);
-    };
+    return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('saada_cart', JSON.stringify(cart));
-  }, [cart]);
+  // Persist cart & wishlist locally (not in Firestore — per-user data)
+  useEffect(() => { localStorage.setItem('saada_cart', JSON.stringify(cart)); }, [cart]);
+  useEffect(() => { localStorage.setItem('saada_wishlist', JSON.stringify(wishlist)); }, [wishlist]);
 
-  useEffect(() => {
-    localStorage.setItem('saada_wishlist', JSON.stringify(wishlist));
-  }, [wishlist]);
-
+  // --- Admin Auth ---
   const loginAdmin = (pin: string): boolean => {
     if (pin === storeSettings.adminPin) {
       setIsAdminAuthenticated(true);
@@ -346,313 +244,155 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('تم تسجيل الخروج من لوحة الإدارة');
   };
 
+  // --- Store Settings ---
   const updateStoreSettings = async (settings: Partial<StoreSettings>) => {
-    await mutateStore(
-      () => setStoreSettings((prev) => ({ ...prev, ...settings })),
-      () => fetch(`${API_BASE}/api/settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings }),
-      }),
-      'تم حفظ إعدادات المحل والجزارة بنجاح ✨'
-    );
+    const updated = { ...storeSettings, ...settings };
+    await persistToFirestore({ storeSettings: updated });
+    showToast('تم حفظ إعدادات المحل والجزارة بنجاح ✨');
   };
 
+  // --- Products ---
+  const addProduct = async (product: Product) => {
+    const updated = [product, ...products.filter(p => p.id !== product.id)];
+    await persistToFirestore({ products: updated });
+    showToast(`تمت إضافة المنتج الجديد "${product.name}"`);
+  };
+
+  const updateProduct = async (productId: string, updated: Partial<Product>) => {
+    const updatedList = products.map(p => p.id === productId ? { ...p, ...updated } : p);
+    await persistToFirestore({ products: updatedList });
+    showToast('تم حفظ التعديلات بنجاح');
+  };
+
+  const deleteProduct = async (productId: string) => {
+    const updatedList = products.filter(p => p.id !== productId);
+    await persistToFirestore({ products: updatedList });
+    showToast('تم حذف المنتج بنجاح');
+  };
+
+  // --- Hero Videos ---
   const addHeroVideo = async (video: HeroVideo) => {
-    await mutateStore(
-      () => setHeroVideos((prev) => [video, ...prev]),
-      () => fetch(`${API_BASE}/api/videos/hero`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video }),
-      }),
-      'تمت إضافة فيديو الواجهة الجديد'
-    );
+    const updated = [video, ...heroVideos.filter(v => v.id !== video.id)];
+    await persistToFirestore({ heroVideos: updated });
+    showToast('تمت إضافة فيديو الواجهة الجديد');
   };
 
   const updateHeroVideo = async (id: string, updated: Partial<HeroVideo>) => {
-    await mutateStore(
-      () => setHeroVideos((prev) => prev.map((v) => (v.id === id ? { ...v, ...updated } : v))),
-      () => fetch(`${API_BASE}/api/videos/hero/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updated }),
-      }),
-      'تم تعديل فيديو الواجهة'
-    );
+    const updatedList = heroVideos.map(v => v.id === id ? { ...v, ...updated } : v);
+    await persistToFirestore({ heroVideos: updatedList });
+    showToast('تم تعديل فيديو الواجهة');
   };
 
   const deleteHeroVideo = async (id: string) => {
-    await mutateStore(
-      () => setHeroVideos((prev) => prev.filter((v) => v.id !== id)),
-      () => fetch(`${API_BASE}/api/videos/hero/${id}`, { method: 'DELETE' }),
-      'تم حذف فيديو الواجهة'
-    );
+    const updatedList = heroVideos.filter(v => v.id !== id);
+    await persistToFirestore({ heroVideos: updatedList });
+    showToast('تم حذف فيديو الواجهة');
   };
 
+  // --- Gallery Videos ---
   const addGalleryVideo = async (video: ButcherVideo) => {
-    await mutateStore(
-      () => setGalleryVideos((prev) => [video, ...prev]),
-      () => fetch(`${API_BASE}/api/videos/gallery`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video }),
-      }),
-      'تمت إضافة فيديو للمعرض'
-    );
+    const updated = [video, ...galleryVideos.filter(v => v.id !== video.id)];
+    await persistToFirestore({ galleryVideos: updated });
+    showToast('تمت إضافة فيديو للمعرض');
   };
 
   const updateGalleryVideo = async (id: string, updated: Partial<ButcherVideo>) => {
-    await mutateStore(
-      () => setGalleryVideos((prev) => prev.map((v) => (v.id === id ? { ...v, ...updated } : v))),
-      () => fetch(`${API_BASE}/api/videos/gallery/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updated }),
-      }),
-      'تم تعديل فيديو المعرض'
-    );
+    const updatedList = galleryVideos.map(v => v.id === id ? { ...v, ...updated } : v);
+    await persistToFirestore({ galleryVideos: updatedList });
+    showToast('تم تعديل فيديو المعرض');
   };
 
   const deleteGalleryVideo = async (id: string) => {
-    await mutateStore(
-      () => setGalleryVideos((prev) => prev.filter((v) => v.id !== id)),
-      () => fetch(`${API_BASE}/api/videos/gallery/${id}`, { method: 'DELETE' }),
-      'تم حذف الفيديو من المعرض'
-    );
+    const updatedList = galleryVideos.filter(v => v.id !== id);
+    await persistToFirestore({ galleryVideos: updatedList });
+    showToast('تم حذف الفيديو من المعرض');
   };
 
+  // --- Offers ---
   const addOffer = async (offer: OfferItem) => {
-    await mutateStore(
-      () => setOffers((prev) => [offer, ...prev]),
-      () => fetch(`${API_BASE}/api/offers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ offer }),
-      }),
-      'تمت إضافة العرض الجديد'
-    );
+    const updated = [offer, ...offers.filter(o => o.id !== offer.id)];
+    await persistToFirestore({ offers: updated });
+    showToast('تمت إضافة العرض الجديد');
   };
 
   const updateOffer = async (id: string, updated: Partial<OfferItem>) => {
-    await mutateStore(
-      () => setOffers((prev) => prev.map((o) => (o.id === id ? { ...o, ...updated } : o))),
-      () => fetch(`${API_BASE}/api/offers/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updated }),
-      }),
-      'تم تعديل العرض بنجاح'
-    );
+    const updatedList = offers.map(o => o.id === id ? { ...o, ...updated } : o);
+    await persistToFirestore({ offers: updatedList });
+    showToast('تم تعديل العرض بنجاح');
   };
 
   const deleteOffer = async (id: string) => {
-    await mutateStore(
-      () => setOffers((prev) => prev.filter((o) => o.id !== id)),
-      () => fetch(`${API_BASE}/api/offers/${id}`, { method: 'DELETE' }),
-      'تم حذف العرض'
-    );
+    const updatedList = offers.filter(o => o.id !== id);
+    await persistToFirestore({ offers: updatedList });
+    showToast('تم حذف العرض');
+  };
+
+  // --- Orders ---
+  const updateOrderStatus = async (orderId: string, status: Order['status']) => {
+    const updatedList = orders.map(o => o.id === orderId ? { ...o, status } : o);
+    await persistToFirestore({ orders: updatedList });
+    showToast(`تم تحديث حالة الطلب ${orderId} إلى "${status}"`);
   };
 
   const updateOrder = async (orderId: string, updated: Partial<Order>) => {
-    await mutateStore(
-      () => setOrders((prev) => prev.map((ord) => (ord.id === orderId ? { ...ord, ...updated } : ord))),
-      () => fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updated }),
-      }),
-      `تم تعديل تفاصيل الطلب ${orderId}`
-    );
+    const updatedList = orders.map(o => o.id === orderId ? { ...o, ...updated } : o);
+    await persistToFirestore({ orders: updatedList });
+    showToast(`تم تعديل تفاصيل الطلب ${orderId}`);
   };
 
   const deleteOrder = async (orderId: string) => {
-    await mutateStore(
-      () => setOrders((prev) => prev.filter((ord) => ord.id !== orderId)),
-      () => fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, { method: 'DELETE' }),
-      `تم حذف الطلب ${orderId} بنجاح 🗑️`
-    );
+    const updatedList = orders.filter(o => o.id !== orderId);
+    await persistToFirestore({ orders: updatedList });
+    showToast(`تم حذف الطلب ${orderId} بنجاح 🗑️`);
   };
 
   const clearAllOrders = async () => {
-    await mutateStore(
-      () => setOrders([]),
-      () => fetch(`${API_BASE}/api/orders/all`, { method: 'DELETE' }),
-      'تم مسح جميع الاوردرات بنجاح 🗑️'
-    );
+    await persistToFirestore({ orders: [] });
+    showToast('تم مسح جميع الاوردرات بنجاح 🗑️');
   };
 
   const clearCancelledOrders = async () => {
-    await mutateStore(
-      () => setOrders((prev) => prev.filter((ord) => ord.status !== 'cancelled')),
-      () => fetch(`${API_BASE}/api/orders/cancelled`, { method: 'DELETE' }),
-      'تم مسح جميع الاوردرات الملغية 🗑️'
-    );
+    const updatedList = orders.filter(o => o.status !== 'cancelled');
+    await persistToFirestore({ orders: updatedList });
+    showToast('تم مسح جميع الاوردرات الملغية 🗑️');
   };
-
-  const addToCart = (
-    product: Product,
-    weightKg: number,
-    weightLabel: string,
-    cutting: CuttingMethod,
-    packaging: PackagingType,
-    fatLevel?: FatLevel,
-    notes?: string
-  ) => {
-    const itemKey = `${product.id}-${weightKg}-${cutting}-${packaging}-${fatLevel || 'def'}`;
-    const calculatedPrice = Math.round(product.pricePerKg * weightKg);
-
-    setCart((prev) => {
-      const existingIndex = prev.findIndex((item) => item.id === itemKey);
-      if (existingIndex > -1) {
-        const updated = [...prev];
-        const newWeight = updated[existingIndex].selectedWeightKg + weightKg;
-        updated[existingIndex] = {
-          ...updated[existingIndex],
-          selectedWeightKg: newWeight,
-          selectedWeightLabel: `${newWeight} كيلو`,
-          calculatedPrice: Math.round(product.pricePerKg * newWeight)
-        };
-        return updated;
-      }
-
-      return [
-        ...prev,
-        {
-          id: itemKey,
-          product,
-          selectedWeightKg: weightKg,
-          selectedWeightLabel: weightLabel,
-          selectedCutting: cutting,
-          selectedPackaging: packaging,
-          selectedFatLevel: fatLevel,
-          itemNotes: notes,
-          calculatedPrice
-        }
-      ];
-    });
-
-    showToast(`تمت إضافة "${product.name}" (${weightLabel}) إلى السلة بنجاح ✨`);
-    setIsCartOpen(true);
-  };
-
-  const removeFromCart = (cartItemId: string) => {
-    setCart((prev) => prev.filter((item) => item.id !== cartItemId));
-  };
-
-  const updateCartItem = (cartItemId: string, weightKg: number, weightLabel: string) => {
-    setCart((prev) =>
-      prev.map((item) => {
-        if (item.id === cartItemId) {
-          return {
-            ...item,
-            selectedWeightKg: weightKg,
-            selectedWeightLabel: weightLabel,
-            calculatedPrice: Math.round(item.product.pricePerKg * weightKg)
-          };
-        }
-        return item;
-      })
-    );
-  };
-
-  const clearCart = () => setCart([]);
-
-  const cartSubtotal = cart.reduce((sum, item) => sum + item.calculatedPrice, 0);
-  const deliveryFee = cartSubtotal >= 1000 || cart.length === 0 ? 0 : 30;
-  const cartTotal = cartSubtotal + deliveryFee;
-
-  const toggleWishlist = (productId: string) => {
-    setWishlist((prev) => {
-      const exists = prev.includes(productId);
-      if (exists) {
-        showToast('تمت إزالة المنتج من القائمة المفضلة');
-        return prev.filter((id) => id !== productId);
-      } else {
-        showToast('تمت إضافة المنتج إلى قائمة المفضلة ❤️');
-        return [...prev, productId];
-      }
-    });
-  };
-
-  const toggleCompare = (product: Product) => {
-    setCompareList((prev) => {
-      const exists = prev.some((p) => p.id === product.id);
-      if (exists) {
-        return prev.filter((p) => p.id !== product.id);
-      }
-      if (prev.length >= 4) {
-        showToast('يمكنك مقارنة 4 منتجات كحد أقصى في المرة الواحدة');
-        return prev;
-      }
-      setIsCompareOpen(true);
-      return [...prev, product];
-    });
-  };
-
-  const clearCompare = () => setCompareList([]);
 
   const placeOrder = (customerInfo: {
-    customerName: string;
-    customerPhone: string;
-    address: string;
-    landmark?: string;
-    deliveryType: 'delivery' | 'pickup';
-    deliveryDate: string;
-    deliveryTimeSlot: string;
-    notes?: string;
+    customerName: string; customerPhone: string; address: string;
+    landmark?: string; deliveryType: 'delivery' | 'pickup';
+    deliveryDate: string; deliveryTimeSlot: string; notes?: string;
   }): Order => {
-    const randomDigits = Math.floor(100000 + Math.random() * 900000);
-    const orderId = `#ORD-${randomDigits}`;
+    const orderId = `#ORD-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // Format Arabic WhatsApp message
-    let itemsText = cart
-      .map(
-        (item, idx) =>
-          `*${idx + 1}. ${item.product.name}*\n` +
-          ` - الوزن: ${item.selectedWeightLabel}\n` +
-          ` - التقطيع: ${item.selectedCutting}\n` +
-          ` - التغليف: ${item.selectedPackaging}\n` +
-          (item.selectedFatLevel ? ` - نسبة الدهن: ${item.selectedFatLevel}\n` : '') +
-          ` - السعر: ${item.calculatedPrice} ج.م`
-      )
-      .join('\n\n');
+    let itemsText = cart.map((item, idx) =>
+      `*${idx + 1}. ${item.product.name}*\n` +
+      ` - الوزن: ${item.selectedWeightLabel}\n` +
+      ` - التقطيع: ${item.selectedCutting}\n` +
+      ` - التغليف: ${item.selectedPackaging}\n` +
+      (item.selectedFatLevel ? ` - نسبة الدهن: ${item.selectedFatLevel}\n` : '') +
+      ` - السعر: ${item.calculatedPrice} ج.م`
+    ).join('\n\n');
 
     const whatsappMessage =
       `السلام عليكم ورحمة الله وبركاته 🥩\n` +
       `أرغب في تأكيد الطلب من موقع *جزارة صاحب السعادة*\n\n` +
-      `====================\n` +
-      `*رقم الطلب:* ${orderId}\n` +
-      `====================\n\n` +
+      `*رقم الطلب:* ${orderId}\n\n` +
       `*الاسم:* ${customerInfo.customerName}\n` +
       `*الهاتف:* ${customerInfo.customerPhone}\n` +
       `*العنوان:* ${customerInfo.address}\n` +
       (customerInfo.landmark ? `*أقرب علامة مميزة:* ${customerInfo.landmark}\n` : '') +
       `*طريقة الاستلام:* ${customerInfo.deliveryType === 'delivery' ? 'توصيل للمنزل' : 'استلام من المحل'}\n` +
       `*موعد التسليم:* ${customerInfo.deliveryDate} - ${customerInfo.deliveryTimeSlot}\n\n` +
-      `====================\n` +
-      `*تفاصيل المنتجات:*\n` +
-      `${itemsText}\n\n` +
-      `====================\n` +
+      `*تفاصيل المنتجات:*\n${itemsText}\n\n` +
       `*إجمالي المنتجات:* ${cartSubtotal} ج.م\n` +
       `*رسوم التوصيل:* ${customerInfo.deliveryType === 'delivery' ? `${deliveryFee} ج.م` : 'مجاناً'}\n` +
       `*الإجمالي الكلي:* ${customerInfo.deliveryType === 'delivery' ? cartTotal : cartSubtotal} ج.م\n` +
-      `====================\n` +
-      (customerInfo.notes ? `*ملاحظات إضافية:* ${customerInfo.notes}\n` : '') +
+      (customerInfo.notes ? `\n*ملاحظات إضافية:* ${customerInfo.notes}\n` : '') +
       `\nشكراً لكم ودمتم بسعادة! ✨`;
-
-    const encodedMsg = encodeURIComponent(whatsappMessage);
-    const whatsappLink = `https://wa.me/201124795553?text=${encodedMsg}`;
 
     const newOrder: Order = {
       id: orderId,
-      createdAt: new Date().toLocaleDateString('ar-EG', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
+      createdAt: new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
       customerName: customerInfo.customerName,
       customerPhone: customerInfo.customerPhone,
       address: customerInfo.address,
@@ -667,165 +407,96 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       discount: 0,
       total: customerInfo.deliveryType === 'delivery' ? cartTotal : cartSubtotal,
       status: 'pending',
-      whatsappLink
+      whatsappLink: `https://wa.me/201124795553?text=${encodeURIComponent(whatsappMessage)}`,
     };
 
-    setOrders((prev) => [newOrder, ...prev]);
+    const updatedOrders = [newOrder, ...orders];
+    persistToFirestore({ orders: updatedOrders }).catch(console.error);
+
     setLastOrder(newOrder);
     clearCart();
     setIsCheckoutOpen(false);
     setIsOrderSuccessOpen(true);
-
-    // Sync order to backend
-    fetch(`${API_BASE}/api/orders`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order: newOrder }),
-    }).catch(console.error);
-
     return newOrder;
   };
 
-  const updateOrderStatus = async (orderId: string, status: Order['status']) => {
-    await mutateStore(
-      () => setOrders((prev) =>
-        prev.map((ord) => (ord.id === orderId ? { ...ord, status } : ord))
-      ),
-      () => fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      }),
-      `تم تحديث حالة الطلب ${orderId} إلى "${status}"`
-    );
-  };
-
-  const addProduct = async (product: Product) => {
-    await mutateStore(
-      () => setProducts((prev) => [product, ...prev]),
-      () => fetch(`${API_BASE}/api/products`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product }),
-      }),
-      `تمت إضافة المنتج الجديد "${product.name}"`
-    );
-  };
-
-  const updateProduct = async (productId: string, updated: Partial<Product>) => {
-    await mutateStore(
-      () => setProducts((prev) =>
-        prev.map((p) => (p.id === productId ? { ...p, ...updated } : p))
-      ),
-      () => fetch(`${API_BASE}/api/products/${productId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updated }),
-      }),
-      'تم حفظ التعديلات بنجاح'
-    );
-  };
-
-  const deleteProduct = async (productId: string) => {
-    await mutateStore(
-      () => setProducts((prev) => prev.filter((p) => p.id !== productId)),
-      () => fetch(`${API_BASE}/api/products/${productId}`, { method: 'DELETE' }),
-      'تم حذف المنتج بنجاح'
-    );
-  };
-
+  // --- Reviews ---
   const addReview = async (review: Omit<Review, 'id' | 'date'>) => {
-    const newRev: Review = {
-      ...review,
-      id: `rev-${Date.now()}`,
-      date: 'الآن'
-    };
-    await mutateStore(
-      () => setReviews((prev) => [newRev, ...prev]),
-      () => fetch(`${API_BASE}/api/reviews`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ review: newRev }),
-      }),
-      'شكراً لتفكيرك وتقييمك لجزارة صاحب السعادة! ❤️'
-    );
+    const newRev: Review = { ...review, id: `rev-${Date.now()}`, date: 'الآن' };
+    const updatedList = [newRev, ...reviews];
+    await persistToFirestore({ reviews: updatedList });
+    showToast('شكراً لتقييمك لجزارة صاحب السعادة! ❤️');
   };
 
-  const setOnNewOrderCallback = (cb: ((count: number) => void) | null) => {
-    onNewOrderRef.current = cb;
+  // --- Cart ---
+  const addToCart = (product: Product, weightKg: number, weightLabel: string, cutting: CuttingMethod, packaging: PackagingType, fatLevel?: FatLevel, notes?: string) => {
+    const itemKey = `${product.id}-${weightKg}-${cutting}-${packaging}-${fatLevel || 'def'}`;
+    const calculatedPrice = Math.round(product.pricePerKg * weightKg);
+    setCart(prev => {
+      const existingIndex = prev.findIndex(item => item.id === itemKey);
+      if (existingIndex > -1) {
+        const updated = [...prev];
+        const newWeight = updated[existingIndex].selectedWeightKg + weightKg;
+        updated[existingIndex] = { ...updated[existingIndex], selectedWeightKg: newWeight, selectedWeightLabel: `${newWeight} كيلو`, calculatedPrice: Math.round(product.pricePerKg * newWeight) };
+        return updated;
+      }
+      return [...prev, { id: itemKey, product, selectedWeightKg: weightKg, selectedWeightLabel: weightLabel, selectedCutting: cutting, selectedPackaging: packaging, selectedFatLevel: fatLevel, itemNotes: notes, calculatedPrice }];
+    });
+    showToast(`تمت إضافة "${product.name}" (${weightLabel}) إلى السلة بنجاح ✨`);
+    setIsCartOpen(true);
   };
+
+  const removeFromCart = (cartItemId: string) => setCart(prev => prev.filter(item => item.id !== cartItemId));
+  const updateCartItem = (cartItemId: string, weightKg: number, weightLabel: string) => {
+    setCart(prev => prev.map(item => item.id === cartItemId ? { ...item, selectedWeightKg: weightKg, selectedWeightLabel: weightLabel, calculatedPrice: Math.round(item.product.pricePerKg * weightKg) } : item));
+  };
+  const clearCart = () => setCart([]);
+
+  const cartSubtotal = cart.reduce((sum, item) => sum + item.calculatedPrice, 0);
+  const deliveryFee = cartSubtotal >= (storeSettings.freeDeliveryThreshold || 1000) || cart.length === 0 ? 0 : (storeSettings.deliveryFee || 30);
+  const cartTotal = cartSubtotal + deliveryFee;
+
+  // --- Wishlist ---
+  const toggleWishlist = (productId: string) => {
+    setWishlist(prev => {
+      if (prev.includes(productId)) { showToast('تمت إزالة المنتج من القائمة المفضلة'); return prev.filter(id => id !== productId); }
+      showToast('تمت إضافة المنتج إلى قائمة المفضلة ❤️');
+      return [...prev, productId];
+    });
+  };
+
+  // --- Compare ---
+  const toggleCompare = (product: Product) => {
+    setCompareList(prev => {
+      if (prev.some(p => p.id === product.id)) return prev.filter(p => p.id !== product.id);
+      if (prev.length >= 4) { showToast('يمكنك مقارنة 4 منتجات كحد أقصى في المرة الواحدة'); return prev; }
+      setIsCompareOpen(true);
+      return [...prev, product];
+    });
+  };
+  const clearCompare = () => setCompareList([]);
+
+  const setOnNewOrderCallback = (cb: ((count: number) => void) | null) => { onNewOrderRef.current = cb; };
+
 
   return (
-    <AppContext.Provider
-      value={{
-        products,
-        activeCategory,
-        setActiveCategory,
-        meatAgeFilter,
-        setMeatAgeFilter,
-        searchQuery,
-        setSearchQuery,
-        heroVideos,
-        galleryVideos,
-        offers,
-        storeSettings,
-        updateStoreSettings,
-        addHeroVideo,
-        updateHeroVideo,
-        deleteHeroVideo,
-        addGalleryVideo,
-        updateGalleryVideo,
-        deleteGalleryVideo,
-        addOffer,
-        updateOffer,
-        deleteOffer,
-        cart,
-        addToCart,
-        removeFromCart,
-        updateCartItem,
-        clearCart,
-        cartSubtotal,
-        deliveryFee,
-        cartTotal,
-        isCartOpen,
-        setIsCartOpen,
-        wishlist,
-        toggleWishlist,
-        compareList,
-        toggleCompare,
-        clearCompare,
-        isCompareOpen,
-        setIsCompareOpen,
-        isCheckoutOpen,
-        setIsCheckoutOpen,
-        orders,
-        placeOrder,
-        lastOrder,
-        isOrderSuccessOpen,
-        setIsOrderSuccessOpen,
-        updateOrderStatus,
-        updateOrder,
-        deleteOrder,
-        clearAllOrders,
-        clearCancelledOrders,
-        isAdminOpen,
-        setIsAdminOpen,
-        isAdminAuthenticated,
-        loginAdmin,
-        logoutAdmin,
-        addProduct,
-        updateProduct,
-        deleteProduct,
-        reviews,
-        addReview,
-        selectedProduct,
-        setSelectedProduct,
-        toastMessage,
-        showToast,
-        persistenceMode,
-        setOnNewOrderCallback
-      }}
-    >
+    <AppContext.Provider value={{
+      products, activeCategory, setActiveCategory, meatAgeFilter, setMeatAgeFilter,
+      searchQuery, setSearchQuery, heroVideos, galleryVideos, offers, storeSettings,
+      updateStoreSettings, addHeroVideo, updateHeroVideo, deleteHeroVideo,
+      addGalleryVideo, updateGalleryVideo, deleteGalleryVideo,
+      addOffer, updateOffer, deleteOffer,
+      cart, addToCart, removeFromCart, updateCartItem, clearCart,
+      cartSubtotal, deliveryFee, cartTotal, isCartOpen, setIsCartOpen,
+      wishlist, toggleWishlist, compareList, toggleCompare, clearCompare,
+      isCompareOpen, setIsCompareOpen, isCheckoutOpen, setIsCheckoutOpen,
+      orders, placeOrder, lastOrder, isOrderSuccessOpen, setIsOrderSuccessOpen,
+      updateOrderStatus, updateOrder, deleteOrder, clearAllOrders, clearCancelledOrders,
+      isAdminOpen, setIsAdminOpen, isAdminAuthenticated, loginAdmin, logoutAdmin,
+      addProduct, updateProduct, deleteProduct,
+      reviews, addReview, selectedProduct, setSelectedProduct,
+      toastMessage, showToast, persistenceMode, setOnNewOrderCallback,
+    }}>
       {children}
     </AppContext.Provider>
   );
