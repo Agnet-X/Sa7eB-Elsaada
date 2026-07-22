@@ -49,12 +49,13 @@ import { MongoClient } from 'mongodb';
 const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = 'butchery_saada';
 const COLLECTION_NAME = 'store_state';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
 let mongoClient: MongoClient | null = null;
 
 async function getMongoClient() {
   if (!MONGODB_URI) return null;
   if (!mongoClient) {
-    mongoClient = new MongoClient(MONGODB_URI);
+    mongoClient = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
     await mongoClient.connect();
   }
   return mongoClient;
@@ -89,7 +90,7 @@ async function getStoreData(): Promise<StoreData> {
   return storeData;
 }
 
-// Save storeData (saves to MongoDB if active, otherwise saves to local file)
+// Save storeData to MongoDB in production. Local files are only safe for development.
 async function persistStoreData(data: StoreData) {
   storeData = data; // Update in-memory cache
   if (MONGODB_URI) {
@@ -108,7 +109,12 @@ async function persistStoreData(data: StoreData) {
       }
     } catch (err) {
       console.error('Error saving store data to MongoDB:', err);
+      if (IS_PRODUCTION) throw err;
     }
+  }
+
+  if (IS_PRODUCTION) {
+    throw new Error('MONGODB_URI is required to save shared store data in production.');
   }
 
   // Fallback to local file persistence
@@ -185,6 +191,19 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
+  // A serverless instance's filesystem and memory are not shared between visitors.
+  // Reject writes explicitly rather than reporting a successful save that will disappear.
+  app.use('/api', (req, res, next) => {
+    const isWriteRequest = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+    if (IS_PRODUCTION && isWriteRequest && !MONGODB_URI) {
+      return res.status(503).json({
+        success: false,
+        error: 'Shared data storage is not configured. Set MONGODB_URI before saving changes.',
+      });
+    }
+    next();
+  });
+
   // CORS Middleware to allow requests from any origin (very helpful when frontend is on Vercel and backend on Render)
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -235,12 +254,8 @@ async function startServer() {
   });
 
   app.get('/api/health', (_req, res) => {
-    const persistence = MONGODB_URI
-      ? 'mongodb'
-      : process.env.VERCEL
-        ? 'memory'
-        : 'file';
-    res.json({ ok: true, persistence });
+    const persistence = MONGODB_URI ? 'mongodb' : IS_PRODUCTION ? 'unconfigured' : 'file';
+    res.json({ ok: true, persistence, sharedDataReady: Boolean(MONGODB_URI) || !IS_PRODUCTION });
   });
 
   // API Routes with No-Cache Headers

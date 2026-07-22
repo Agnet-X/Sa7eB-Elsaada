@@ -381,13 +381,13 @@ export const AdminDashboard: React.FC = () => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-md overflow-y-auto">
       <div className="relative w-full max-w-7xl my-4 bg-[#0f0f13] border border-amber-500/40 rounded-3xl p-4 sm:p-8 shadow-2xl text-slate-100 min-h-[85vh] flex flex-col justify-between">
 
-        {(persistenceMode === 'memory' || persistenceMode === 'unknown') && (
+        {(persistenceMode === 'memory' || persistenceMode === 'unconfigured' || persistenceMode === 'unknown') && (
           <div className="mb-4 flex items-start gap-3 rounded-2xl border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-amber-200">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
             <div className="text-sm leading-relaxed">
               <p className="font-bold text-amber-300">تحذير: التعديلات قد لا تظهر لكل الزوار</p>
               <p className="mt-1 text-amber-100/90">
-                {persistenceMode === 'memory'
+                {persistenceMode === 'memory' || persistenceMode === 'unconfigured'
                   ? 'قاعدة البيانات غير مربوطة. أضف متغير MONGODB_URI في إعدادات Vercel ثم أعد النشر.'
                   : 'تعذّر الاتصال بالسيرفر. تأكد أن الموقع يعمل وأن API متاح.'}
               </p>

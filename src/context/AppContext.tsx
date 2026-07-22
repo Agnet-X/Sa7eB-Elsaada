@@ -132,7 +132,7 @@ interface AppContextType {
   showToast: (msg: string) => void;
 
   // Backend persistence status (mongodb = shared for all visitors)
-  persistenceMode: 'unknown' | 'mongodb' | 'file' | 'memory';
+  persistenceMode: 'unknown' | 'mongodb' | 'file' | 'memory' | 'unconfigured';
 
   // New Order Notification callback registration (for admin sound alerts)
   setOnNewOrderCallback: (cb: ((count: number) => void) | null) => void;
@@ -177,7 +177,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [persistenceMode, setPersistenceMode] = useState<'unknown' | 'mongodb' | 'file' | 'memory'>('unknown');
+  const [persistenceMode, setPersistenceMode] = useState<'unknown' | 'mongodb' | 'file' | 'memory' | 'unconfigured'>('unknown');
 
   const SAVE_ERROR_MSG = 'فشل الحفظ — التعديلات لن تظهر للزوار. تحقق من إعداد قاعدة البيانات (MongoDB).';
 
@@ -329,7 +329,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [wishlist]);
 
   const loginAdmin = (pin: string): boolean => {
-    if (pin === storeSettings.adminPin || pin === '5553' || pin === 'admin123') {
+    if (pin === storeSettings.adminPin) {
       setIsAdminAuthenticated(true);
       sessionStorage.setItem('saada_admin_authed', 'true');
       showToast('أهلاً بك يا صاحب السعادة! تم تسجيل دخول الإدارة بنجاح 🔐');
