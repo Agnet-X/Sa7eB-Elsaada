@@ -179,7 +179,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             galleryVideos: BUTCHER_SHOWCASE_VIDEOS,
             offers: TODAY_OFFERS,
             orders: [],
-            reviews: INITIAL_REVIEWS,
+            reviews: [],
           };
           setDoc(storeDocRef, initialData).catch(console.error);
           setPersistenceMode('firestore');

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Send, ShieldCheck, MapPin, Phone, Clock, FileText, CheckCircle2 } from 'lucide-react';
+import { X, Send, MapPin, Phone, Calendar } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const CheckoutModal: React.FC = () => {
@@ -8,30 +8,32 @@ export const CheckoutModal: React.FC = () => {
   if (!isCheckoutOpen) return null;
 
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('01124795553');
-  const [address, setAddress] = useState('الجيزة - مزلقان مني الأمير - شارع زكريا إدريس');
-  const [landmark, setLandmark] = useState('بجوار صيدلية دكتور محمد حامد');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [landmark, setLandmark] = useState('');
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
-  const [deliveryDate, setDeliveryDate] = useState('اليوم (طازج)');
-  const [deliveryTimeSlot, setDeliveryTimeSlot] = useState('الفترة المسائية (5 مساءً - 9 مساءً)');
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [deliveryTimeSlot, setDeliveryTimeSlot] = useState('الفترة الصباحية (9 صباحاً - 2 ظهراً)');
   const [notes, setNotes] = useState('');
+
+  // Min date = today
+  const today = new Date().toISOString().split('T')[0];
 
   const handleConfirmOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone || !address) return;
+    if (!name || !phone || (deliveryType === 'delivery' && !address) || !deliveryDate) return;
 
     const createdOrder = placeOrder({
       customerName: name,
       customerPhone: phone,
-      address,
+      address: deliveryType === 'pickup' ? 'استلام من المحل' : address,
       landmark,
       deliveryType,
       deliveryDate,
       deliveryTimeSlot,
-      notes
+      notes,
     });
 
-    // Automatically open WhatsApp with pre-formatted message
     if (createdOrder.whatsappLink) {
       window.open(createdOrder.whatsappLink, '_blank');
     }
@@ -55,7 +57,7 @@ export const CheckoutModal: React.FC = () => {
             بيانات التوصيل وإرسال الطلب عبر الواتساب 🥩
           </h2>
           <p className="text-xs text-slate-400 font-medium mt-1">
-            الدفع نقداً عند الاستلام فقط (Cash on Delivery) - لا يلزم إضافة أي بطاقة ائتمان.
+            الدفع نقداً عند الاستلام فقط — لا يلزم إضافة أي بطاقة ائتمان.
           </p>
         </div>
 
@@ -63,7 +65,7 @@ export const CheckoutModal: React.FC = () => {
           {/* Name & Phone */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-amber-300 mb-1">اسم العميل بالكامل:</label>
+              <label className="block text-amber-300 mb-1">اسم العميل بالكامل: *</label>
               <input
                 type="text"
                 required
@@ -73,13 +75,12 @@ export const CheckoutModal: React.FC = () => {
                 className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white focus:outline-none focus:border-amber-400 text-xs"
               />
             </div>
-
             <div>
-              <label className="block text-amber-300 mb-1">رقم الهاتف للتواصل:</label>
+              <label className="block text-amber-300 mb-1">رقم الهاتف للتواصل: *</label>
               <input
                 type="tel"
                 required
-                placeholder="01124795553"
+                placeholder="01xxxxxxxxx"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white focus:outline-none focus:border-amber-400 text-xs"
@@ -89,8 +90,8 @@ export const CheckoutModal: React.FC = () => {
 
           {/* Delivery vs Pickup */}
           <div>
-            <label className="block text-amber-300 mb-1">طريقة الحصول على الطلب:</label>
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <label className="block text-amber-300 mb-2">طريقة الحصول على الطلب:</label>
+            <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setDeliveryType('delivery')}
@@ -100,7 +101,7 @@ export const CheckoutModal: React.FC = () => {
                     : 'bg-neutral-900 border-neutral-800 text-slate-400'
                 }`}
               >
-                توصيل للمنزل بالجيزة 🚚
+                توصيل للمنزل 🚚
               </button>
               <button
                 type="button"
@@ -111,45 +112,49 @@ export const CheckoutModal: React.FC = () => {
                     : 'bg-neutral-900 border-neutral-800 text-slate-400'
                 }`}
               >
-                استلام من جزارة مزلقان مني الأمير 🏪
+                استلام من المحل 🏪
               </button>
             </div>
           </div>
 
-          {/* Address & Landmark */}
-          <div>
-            <label className="block text-amber-300 mb-1">العنوان بالتفصيل:</label>
-            <input
-              type="text"
-              required
-              placeholder="مثلاً: الجيزة - شارع زكريا إدريس"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white focus:outline-none focus:border-amber-400 text-xs mb-2"
-            />
-            <input
-              type="text"
-              placeholder="أقرب علامة مميزة (مثلاً: بجوار صيدلية د. محمد حامد)"
-              value={landmark}
-              onChange={(e) => setLandmark(e.target.value)}
-              className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-slate-300 focus:outline-none focus:border-amber-400 text-xs"
-            />
-          </div>
+          {/* Address — only for delivery */}
+          {deliveryType === 'delivery' && (
+            <div>
+              <label className="block text-amber-300 mb-1">العنوان بالتفصيل: *</label>
+              <input
+                type="text"
+                required
+                placeholder="مثلاً: الجيزة - شارع زكريا إدريس"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white focus:outline-none focus:border-amber-400 text-xs mb-2"
+              />
+              <input
+                type="text"
+                placeholder="أقرب علامة مميزة (اختياري)"
+                value={landmark}
+                onChange={(e) => setLandmark(e.target.value)}
+                className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-slate-300 focus:outline-none focus:border-amber-400 text-xs"
+              />
+            </div>
+          )}
 
-          {/* Delivery Slot */}
+          {/* Date & Time */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-slate-300 mb-1">تاريخ الاستلام:</label>
-              <select
+              <label className="block text-amber-300 mb-1 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5" />
+                تاريخ الاستلام: *
+              </label>
+              <input
+                type="date"
+                required
+                min={today}
                 value={deliveryDate}
                 onChange={(e) => setDeliveryDate(e.target.value)}
                 className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white focus:outline-none focus:border-amber-400 text-xs"
-              >
-                <option value="اليوم (طازج)">اليوم طازج ذبح الصباح</option>
-                <option value="غداً صباحاً">غداً صباحاً</option>
-              </select>
+              />
             </div>
-
             <div>
               <label className="block text-slate-300 mb-1">الفترة الزمنية المفضلة:</label>
               <select
@@ -163,9 +168,9 @@ export const CheckoutModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Additional Notes */}
+          {/* Notes */}
           <div>
-            <label className="block text-slate-300 mb-1">ملاحظات خاصة بالإعداد والتوصيل:</label>
+            <label className="block text-slate-300 mb-1">ملاحظات خاصة (اختياري):</label>
             <textarea
               rows={2}
               placeholder="مثلاً: يرجى الاتصال قبل الوصول بـ 10 دقائق..."
@@ -175,7 +180,7 @@ export const CheckoutModal: React.FC = () => {
             />
           </div>
 
-          {/* Order Summary Box */}
+          {/* Order Summary */}
           <div className="p-4 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-1 text-slate-300">
             <div className="flex justify-between">
               <span>إجمالي الأصناف ({cart.length}):</span>
@@ -195,13 +200,12 @@ export const CheckoutModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Confirm Button */}
           <button
             type="submit"
             className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 text-white font-extrabold text-sm shadow-xl flex items-center justify-center space-x-2 space-x-reverse"
           >
             <Send className="w-5 h-5 ml-2 text-white" />
-            <span>إرسال الطلب فوراً عبر الواتساب (01124795553)</span>
+            <span>إرسال الطلب فوراً عبر الواتساب</span>
           </button>
         </form>
       </div>
