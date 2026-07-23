@@ -143,6 +143,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const prevOrderCountRef = useRef<number>(-1);
   const onNewOrderRef = useRef<((count: number) => void) | null>(null);
 
+  // Play notification sound for new orders
+  const playNewOrderSound = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const playTone = (freq: number, start: number, dur: number, vol = 0.4) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(vol, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+        osc.start(start);
+        osc.stop(start + dur);
+      };
+      const now = ctx.currentTime;
+      playTone(880, now, 0.18, 0.35);
+      playTone(1100, now + 0.2, 0.18, 0.35);
+      playTone(1320, now + 0.4, 0.35, 0.5);
+      setTimeout(() => ctx.close(), 1200);
+    } catch (e) { /* Web Audio not supported */ }
+  };
+
   // --- Helpers ---
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -179,7 +204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             galleryVideos: BUTCHER_SHOWCASE_VIDEOS,
             offers: TODAY_OFFERS,
             orders: [],
-            reviews: INITIAL_REVIEWS,
+            reviews: [],
           };
           setDoc(storeDocRef, initialData).catch(console.error);
           setPersistenceMode('firestore');
@@ -198,11 +223,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setOrders(prev => {
             const newOrders: Order[] = data.orders;
             if (prevOrderCountRef.current === -1) {
+              // First snapshot — set baseline, don't notify
               prevOrderCountRef.current = newOrders.length;
             } else if (newOrders.length > prevOrderCountRef.current) {
               const newCount = newOrders.length - prevOrderCountRef.current;
-              if (onNewOrderRef.current) onNewOrderRef.current(newCount);
               prevOrderCountRef.current = newOrders.length;
+              // Always play sound + notify callback
+              playNewOrderSound();
+              if (onNewOrderRef.current) onNewOrderRef.current(newCount);
+              setTimeout(() => showToast(`🔔 طلب جديد وصل! (${newCount} طلب)`), 0);
             } else {
               prevOrderCountRef.current = newOrders.length;
             }

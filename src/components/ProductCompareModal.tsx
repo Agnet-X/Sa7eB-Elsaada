@@ -88,7 +88,7 @@ export const ProductCompareModal: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    addToCart(product, 1, '1 كجم', 'cubes', 'vacuum');
+                    addToCart(product, 1, '1 كجم', 'cubes', 'regular');
                     setIsCompareOpen(false);
                   }}
                   className="w-full py-2 rounded-xl bg-gradient-to-r from-red-800 to-amber-600 hover:from-red-700 text-white font-bold text-xs flex items-center justify-center"

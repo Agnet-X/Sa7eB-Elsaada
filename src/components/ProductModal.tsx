@@ -11,7 +11,7 @@ export const ProductModal: React.FC = () => {
   const [weightKg, setWeightKg] = useState<number>(1);
   const [customWeight, setCustomWeight] = useState<string>('');
   const [cutting, setCutting] = useState<CuttingMethod>('cubes');
-  const [packaging, setPackaging] = useState<PackagingType>('vacuum');
+  const [packaging, setPackaging] = useState<PackagingType>('regular');
   const [fatLevel, setFatLevel] = useState<FatLevel>(
     selectedProduct.fatLevelOptions ? selectedProduct.fatLevelOptions[0] : 'medium'
   );
@@ -206,7 +206,6 @@ export const ProductModal: React.FC = () => {
             </label>
             <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
               {[
-                { id: 'vacuum', label: 'تفريغ هواء Vacuum (موصى به) ✨' },
                 { id: 'regular', label: 'أطباق فل ونيلون عادي 📦' },
                 { id: 'family-ice', label: 'تغليف حافظ مع كيس ثلج 🧊' },
                 { id: 'gift', label: 'تغليف فاخر هدايا 🎁' }

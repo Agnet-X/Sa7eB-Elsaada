@@ -172,7 +172,7 @@ export const ProductCard: React.FC<{ product: Product }> = ({ product }) => {
                 selectedWeightKg,
                 `${selectedWeightKg} كجم`,
                 'cubes',
-                'vacuum',
+                'regular',
                 product.fatLevelOptions ? product.fatLevelOptions[0] : undefined
               )
             }

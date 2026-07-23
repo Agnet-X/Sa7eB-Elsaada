@@ -21,7 +21,7 @@ export type CuttingMethod =
 
 export type FatLevel = 'low' | 'medium' | 'high' | 'not-applicable';
 
-export type PackagingType = 'regular' | 'vacuum' | 'gift' | 'family-ice';
+export type PackagingType = 'regular' | 'gift' | 'family-ice';
 
 export interface Product {
   id: string;

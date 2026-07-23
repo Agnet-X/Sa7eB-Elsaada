@@ -120,7 +120,7 @@ export const OffersSection: React.FC = () => {
                           1,
                           offer.weightLabel,
                           'cubes',
-                          'vacuum',
+                          'regular',
                           'medium',
                           `طلب عرض خاص: ${offer.title}`
                         )

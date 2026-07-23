@@ -229,7 +229,7 @@ export const Hero: React.FC = () => {
         </div>
         <div className="p-3.5 rounded-2xl bg-[#16161a] border border-white/5 flex items-center justify-center space-x-2 space-x-reverse text-xs text-gray-300 font-bold">
           <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-          <span>تغليف تفريغ هواء Vacuum</span>
+          <span>تغليف نظيف مع كيس ثلج</span>
         </div>
         <div className="p-3.5 rounded-2xl bg-[#16161a] border border-white/5 flex items-center justify-center space-x-2 space-x-reverse text-xs text-gray-300 font-bold">
           <Flame className="w-4 h-4 text-[#e63946] shrink-0" />

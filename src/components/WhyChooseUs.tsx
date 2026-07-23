@@ -15,8 +15,8 @@ export const WhyChooseUs: React.FC = () => {
     },
     {
       icon: <PackageCheck className="w-8 h-8 text-amber-400" />,
-      title: 'تفريغ هواء Vacuum',
-      desc: 'تغليف آلي مفرغ من الهواء للحفاظ على نضارة وطعم اللحم الطازج.'
+      title: 'تغليف نظيف ومحكم',
+      desc: 'تغليف بأطباق نظيفة مع أكياس حافظة للثلج للحفاظ على طزاجة اللحم.'
     },
     {
       icon: <Sparkles className="w-8 h-8 text-amber-400" />,
